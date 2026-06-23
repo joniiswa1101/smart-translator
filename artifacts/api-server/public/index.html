@@ -735,7 +735,7 @@ let clientSecret = null;
 
 async function initWebSocket() {
   try {
-    notify('Connecting to OpenAI...', 'info');
+    notify('Connecting...', 'info');
     const res = await fetch('/api/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -743,25 +743,24 @@ async function initWebSocket() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.details || data.error || 'Session failed');
-    clientSecret = data.client_secret;
 
-    ws = new WebSocket(
-      `wss://api.openai.com/v1/realtime/translations?model=gpt-4o-realtime-preview-2025-06-03`,
-      ['realtime', `openai-insecure-api-key.${clientSecret}`, 'openai-beta.realtime-v1']
-    );
+    if (data.use_proxy) {
+      // Ephemeral sessions not available; use server-side proxy
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${proto}//${location.host}/ws`);
+    } else {
+      // Ephemeral secret available; connect directly to OpenAI
+      clientSecret = data.client_secret;
+      ws = new WebSocket(
+        `wss://api.openai.com/v1/realtime?model=gpt-realtime`,
+        ['realtime', `openai-insecure-api-key.${clientSecret}`, 'openai-beta.realtime-v1']
+      );
+    }
 
     ws.onopen = () => {
       updateConn(true);
       notify('Connected to OpenAI Realtime', 'success');
-      ws.send(JSON.stringify({
-        type: 'session.update',
-        session: {
-          input_audio_format: 'pcm16',
-          output_audio_format: 'pcm16',
-          input_audio_transcription: { model: 'whisper-1' },
-          turn_detection: null,
-        }
-      }));
+      // No session.update needed for v1 realtime API; session is auto-configured
     };
 
     ws.onmessage = onWSMessage;
@@ -790,6 +789,8 @@ function onWSMessage(event) {
   try { msg = JSON.parse(event.data); } catch { return; }
 
   switch (msg.type) {
+    // Audio output (new API: response.output_audio.delta, old: response.audio.delta)
+    case 'response.output_audio.delta':
     case 'response.audio.delta':
       if (!currentTurn) break;
       if (!currentTurn.timestamps.t_first_response_byte) {
@@ -799,10 +800,19 @@ function onWSMessage(event) {
       currentTurn.audioChunks.push(msg.delta);
       break;
 
+    // Transcript output (new API: response.output_audio_transcript.delta, old: response.text.delta / response.audio_transcript.delta)
+    case 'response.output_audio_transcript.delta':
+    case 'response.audio_transcript.delta':
     case 'response.text.delta':
       if (currentTurn) currentTurn.transcripts.result += msg.delta || '';
       break;
 
+    case 'response.output_audio_transcript.done':
+    case 'response.audio_transcript.done':
+      if (currentTurn) currentTurn.transcripts.result = msg.transcript || currentTurn.transcripts.result;
+      break;
+
+    // Input audio transcription (source)
     case 'conversation.item.input_audio_transcription.delta':
       if (currentTurn) currentTurn.transcripts.source += msg.delta || '';
       break;
@@ -811,14 +821,8 @@ function onWSMessage(event) {
       if (currentTurn) currentTurn.transcripts.source = msg.transcript || currentTurn.transcripts.source;
       break;
 
-    case 'response.audio_transcript.delta':
-      if (currentTurn) currentTurn.transcripts.result += msg.delta || '';
-      break;
-
-    case 'response.audio_transcript.done':
-      if (currentTurn) currentTurn.transcripts.result = msg.transcript || currentTurn.transcripts.result;
-      break;
-
+    // Response done
+    case 'response.output_audio.done':
     case 'response.done':
       if (!currentTurn) break;
       currentTurn.timestamps.t_response_complete = performance.now();
