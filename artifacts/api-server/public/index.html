@@ -823,6 +823,8 @@ function onWSMessage(event) {
 
     // Response done
     case 'response.output_audio.done':
+      // Only update completion flag; don't trigger playback yet
+      break;
     case 'response.done':
       if (!currentTurn) break;
       currentTurn.timestamps.t_response_complete = performance.now();
@@ -895,6 +897,7 @@ async function playTranslatedAudio() {
     source.connect(playCtx.destination);
 
     source.onended = () => {
+      if (!currentTurn) return; // already finalized
       currentTurn.timestamps.t_playback_end = performance.now();
       playCtx.close();
       finalizeTurn('ok');
