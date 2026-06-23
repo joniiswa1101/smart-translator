@@ -39,6 +39,12 @@ const devPublic = path.resolve(process.cwd(), "public");
 const prodPublic = path.resolve(process.cwd(), "artifacts/api-server/public");
 const publicDir = existsSync(devPublic) ? devPublic : prodPublic;
 
+// Disable caching for HTML so Replit's preview pane always gets fresh content
+app.use((_req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("X-Frame-Options", "ALLOWALL");
+  next();
+});
 app.use(express.static(publicDir));
 app.get("/", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
