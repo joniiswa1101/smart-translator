@@ -1,0 +1,191 @@
+Build a complete latency measurement test rig for OpenAI gpt-realtime-translate API. This is a PWA (no offline needed) for measuring consecutive interpreter mode latency on PC desktop. User speaks Indonesian → system translates to English in real-time. Goal: measure how long dead-air is between speech end and translated audio playback.
+
+## Project Name & Structure
+- Project name: voca-interpreter-latency-test
+- Runtime: Node.js + Express 5
+- Keep it minimal, single page app (no routing, no database)
+
+## Files to Create
+
+### 1. package.json
+- Dependencies: express (5.0.0), dotenv, openai SDK
+- Scripts: start and dev
+- Node >= 18
+
+### 2. server.js (Backend)
+- Express server on port 3000
+- Serve static files from ./public folder
+- GET /api/health → return {status: 'ok', timestamp}
+- POST /api/session → mint ephemeral client secret from OpenAI API
+  - Input: {targetLanguage: 'en'} (hardcoded v1, only English)
+  - Output: {client_secret: value, expires_at: timestamp}
+  - Use OpenAI SDK to call sessions.create() with model='gpt-realtime-translate'
+  - IMPORTANT: API key must come from .env (OPENAI_API_KEY), NEVER expose to frontend
+  - Return ephemeral secret to frontend for direct WebSocket connection
+
+### 3. public/index.html (Frontend - THIS IS THE CORE)
+Complete single HTML file with embedded CSS and JavaScript. Structure:
+
+**UI Layout:**
+- Header: title "🎙️ Interpreter Latency Test Rig"
+- Control panel with 3 sections:
+  1. State indicator (large badge showing current state: IDLE/LISTENING/SILENCE_DETECTED/SENDING/WAITING/STREAMING/COMPLETE/PLAYING/ERROR)
+  2. Config controls: silence threshold slider (500-2500ms, default 1500), amplitude threshold slider (0.01-0.2, default 0.05), target language dropdown (only 'en' available v1)
+  3. Action buttons: Start Recording, Reset Session, Export JSON
+- Microphone level meter with visual bar and red threshold line
+- Session statistics cards: Avg First Byte Latency, Avg Total Gap, Total Turns, Connection Status
+- Logs table showing all turns with columns: #, State, Speech(ms), Model 1st Byte(ms), Model Total(ms), Total Gap(ms), Playback(ms), Full Cycle(ms), Source(ID), Result(EN), Status
+
+**Core JavaScript Logic:**
+
+1. **State Machine** (use STATE object with values: idle, listening, silence-detected, sending, waiting, streaming, complete, playing, error)
+   - IDLE → LISTENING (when amplitude > threshold)
+   - LISTENING → SILENCE_DETECTED (when silence >= config.silenceThreshold ms)
+   - SILENCE_DETECTED → SENDING (mic muted, send audio buffer)
+   - SENDING → WAITING (audio sent, wait for API response)
+   - WAITING → STREAMING (first byte received from OpenAI)
+   - STREAMING → COMPLETE (no more audio bytes)
+   - COMPLETE → PLAYING (start playback)
+   - PLAYING → IDLE (playback end, mic re-enabled)
+   - Any state → ERROR (on WebSocket error)
+
+2. **Audio Capture & VAD (Voice Activity Detection)**
+   - Use navigator.mediaDevices.getUserMedia with echoCancellation: true
+   - Create AudioContext (24kHz sample rate)
+   - Use ScriptProcessor to analyze audio levels per frame
+   - Calculate RMS (root mean square) for amplitude detection
+   - When RMS > amplitudeThreshold and currentState == IDLE → startNewTurn()
+   - Buffer raw audio while LISTENING
+   - When RMS drops below threshold for silenceThreshold duration → handleSilenceDetected()
+   - Update mic level meter in real-time (0-100% fill, with threshold red line)
+
+3. **Turn Management**
+   - Each turn = one utterance (speech → silence detected → translate → playback)
+   - Store per turn:
+     - timestamps: t_speech_start, t_speech_end, t_send_complete, t_first_response_byte, t_response_complete, t_playback_start, t_playback_end, t_mic_reenabled (all use performance.now())
+     - metrics: (calculated after turn complete)
+     - transcripts: source (ID), result (EN)
+     - status: 'good'/'acceptable'/'slow' (based on total_turn_gap thresholds)
+
+4. **Metrics Calculation** (after each turn)
+   - speech_duration = t_speech_end - t_speech_start
+   - model_first_byte_latency = t_first_response_byte - t_send_complete (KEY METRIC)
+   - model_total_response_latency = t_response_complete - t_send_complete
+   - playback_start_delay = t_playback_start - t_first_response_byte
+   - total_turn_gap = t_playback_start - t_speech_end (USER-PERCEIVED LATENCY, KEY METRIC)
+   - playback_duration = t_playback_end - t_playback_start
+   - full_cycle_time = t_mic_reenabled - t_speech_start
+   - Session summary: avg, min, max, p95 for first_byte_latency and total_turn_gap
+
+5. **WebSocket Client to OpenAI gpt-realtime-translate**
+   - Fetch /api/session to get ephemeral client_secret
+   - Open WebSocket: wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate
+   - Send session.update with audio.output.language = config.targetLanguage
+   - When audio buffer ready (after silence detected + mic muted):
+     - Convert Float32 audio to PCM16 (base64 encoded)
+     - Send: {type: 'session.input_audio_buffer.append', audio: base64}
+     - Send: {type: 'session.input_audio_buffer.commit'}
+   - Listen for:
+     - response.audio.delta → buffer audio, record t_first_response_byte if first time, update state to STREAMING
+     - response.text.delta → accumulate transcript result
+     - conversation.item.input_audio_transcription.delta → accumulate transcript source
+     - response.done → mark t_response_complete, state to COMPLETE, call playTranslatedAudio()
+   - Handle errors → state to ERROR, show notification
+
+6. **Audio Playback**
+   - Collect all audio.delta chunks (base64)
+   - Decode base64 → binary → AudioContext.decodeAudioData()
+   - Create BufferSource, connect to destination
+   - source.onended → record t_playback_end, calculate metrics, re-enable mic, add turn to log, update stats, back to IDLE
+   - On error → re-enable mic anyway, state ERROR
+
+7. **UI Updates**
+   - updateState(newState) → update state indicator badge + color
+   - updateMeterFill(level) → update meter bar width + threshold line position
+   - addTurnToLog(turn) → insert row into logs table with all metrics
+   - updateStatsSummary() → recalc and display avg/min/max in stat cards
+   - notifyUser(msg, type) → show toast notification
+
+8. **Data Export**
+   - exportMetrics() → collect all turns data
+   - Create JSON object with: session_info, turns array (full timestamps + metrics + transcripts), summary stats
+   - Trigger download as "interpreter-latency-test-YYYY-MM-DD.json"
+
+9. **Configuration Handlers**
+   - silenceThreshold slider → update config, display value
+   - amplitudeThreshold slider → update config, update threshold line position
+   - targetLanguage dropdown → update config (hardcoded to 'en' only in v1)
+
+**Styling:**
+- Gradient background (purple)
+- Card-based layout, rounded corners
+- State indicator: large, bold, colored (green=idle, blue=listening, yellow=detecting, red=error, cyan=playing)
+- Animations: pulse animation for active states (listening, streaming, playing)
+- Mic meter: green→yellow→red gradient
+- Logs table: sticky header, hover effect, truncate long text
+- Responsive: work on desktop 1400px+, mobile fallback acceptable
+
+### 4. .env.example
+```
+OPENAI_API_KEY=sk_your_api_key_here
+PORT=3000
+NODE_ENV=development
+```
+
+### 5. .gitignore
+Standard Node.js: node_modules/, .env, .DS_Store, *.log, .idea/, dist/, build/, replit.nix
+
+### 6. replit.nix
+Replit environment config for Node.js 20
+
+### 7. .replit
+```
+run = "npm install && npm start"
+[env]
+OPENAI_API_KEY = ""
+[[ports]]
+localPort = 3000
+externalPort = 80
+```
+
+### 8. README.md
+Document with:
+- Quick start instructions for Replit
+- How to set OPENAI_API_KEY in Replit Secrets
+- Explanation of the state machine
+- All metrics definitions
+- Target latencies (< 2s ideal, < 3.5s acceptable, > 4s not viable)
+- Troubleshooting section
+- Success criteria before production
+
+### 9. TESTING-GUIDE.md
+Step-by-step guide for Joni to run test sessions:
+- Pre-test checklist (mic working, WiFi stable, etc)
+- Session 1: calibration (find good threshold values)
+- Session 2: measurement (20+ turns)
+- Session 3: export & analyze
+- Success criteria for production
+- Troubleshooting common issues
+
+## Important Notes for Implementation
+
+1. **SECURITY:** API key ONLY in server.js .env, never expose to frontend. Use ephemeral client secret pattern from OpenAI docs.
+
+2. **PRECISION:** Use performance.now() for all timestamps, precision is millisecond-critical for latency measurement.
+
+3. **AUDIO FORMAT:** 24kHz PCM16 per gpt-realtime-translate spec. Browser AudioContext default may differ, handle conversion.
+
+4. **HARDCODED V1:** 
+   - Target language = English only (dropdown disabled)
+   - Single mic input
+   - No language detection/routing
+   - No multi-user mode
+   - This is intentional — measurement tool only, not production feature
+
+5. **STATE MACHINE:** Must be bulletproof. Transitions should only happen at correct states. If stuck, Reset button should force IDLE.
+
+6. **ERROR HANDLING:** WebSocket disconnect → state ERROR, show notification, allow Reset. Mic error → state ERROR, show notification.
+
+7. **RESPONSIVE:** Desktop first (1400px target), but don't break on mobile for testing convenience.
+
+Start with this structure and generate all files. Test by running `npm start` and opening http://localhost:3000 in browser.
