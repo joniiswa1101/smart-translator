@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎙️ Interpreter Latency Test Rig</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0a1e;
+      --surface: rgba(255,255,255,0.06);
+      --surface2: rgba(255,255,255,0.10);
+      --border: rgba(255,255,255,0.12);
+      --accent: #a78bfa;
+      --accent2: #7c3aed;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --green: #4ade80;
+      --blue: #60a5fa;
+      --yellow: #facc15;
+      --red: #f87171;
+      --cyan: #22d3ee;
+      --orange: #fb923c;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.3) 0%, transparent 60%),
+        radial-gradient(ellipse 40% 30% at 80% 80%, rgba(167,139,250,0.1) 0%, transparent 50%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+    header h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #a78bfa, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p {
+      color: var(--muted);
+      font-size: 0.875rem;
+      margin-top: 4px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 20px;
+      max-width: 1500px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* STATE BADGE */
+    #state-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px;
+      border-radius: 999px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      width: 100%;
+      justify-content: center;
+      transition: all 0.25s ease;
+      background: rgba(74,222,128,0.15);
+      border: 2px solid var(--green);
+      color: var(--green);
+    }
+    #state-badge .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    #state-badge.state-listening { background: rgba(96,165,250,0.15); border-color: var(--blue); color: var(--blue); }
+    #state-badge.state-silence-detected { background: rgba(250,204,21,0.15); border-color: var(--yellow); color: var(--yellow); }
+    #state-badge.state-sending { background: rgba(250,204,21,0.15); border-color: var(--yellow); color: var(--yellow); }
+    #state-badge.state-waiting { background: rgba(167,139,250,0.15); border-color: var(--accent); color: var(--accent); }
+    #state-badge.state-streaming { background: rgba(167,139,250,0.15); border-color: var(--accent); color: var(--accent); }
+    #state-badge.state-complete { background: rgba(34,211,238,0.15); border-color: var(--cyan); color: var(--cyan); }
+    #state-badge.state-playing { background: rgba(34,211,238,0.15); border-color: var(--cyan); color: var(--cyan); }
+    #state-badge.state-error { background: rgba(248,113,113,0.15); border-color: var(--red); color: var(--red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.2); }
+    }
+    .state-listening .dot,
+    .state-streaming .dot,
+    .state-playing .dot { animation: pulse 1s ease-in-out infinite; }
+
+    /* CONFIG */
+    .config-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 14px;
+    }
+    .config-row label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+    .config-row label span { color: var(--accent); font-weight: 600; }
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--surface2);
+      outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      box-shadow: 0 0 8px rgba(167,139,250,0.6);
+    }
+    select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.875rem;
+      width: 100%;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    /* BUTTONS */
+    .btn-group { display: flex; gap: 10px; flex-direction: column; margin-top: 4px; }
+    button {
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      letter-spacing: 0.3px;
+    }
+    #btn-start {
+      background: linear-gradient(135deg, #7c3aed, #a78bfa);
+      color: white;
+    }
+    #btn-start:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    #btn-start:active { transform: translateY(0); }
+    #btn-start:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    #btn-reset {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    #btn-reset:hover { background: rgba(248,113,113,0.15); border-color: var(--red); color: var(--red); }
+    #btn-export {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    #btn-export:hover { background: rgba(74,222,128,0.12); border-color: var(--green); color: var(--green); }
+
+    /* MIC METER */
+    .meter-wrap {
+      position: relative;
+      height: 28px;
+      background: var(--surface2);
+      border-radius: 6px;
+      overflow: visible;
+      margin-top: 8px;
+    }
+    #meter-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #4ade80, #facc15, #f87171);
+      transition: width 0.08s ease;
+    }
+    #threshold-line {
+      position: absolute;
+      top: -4px;
+      bottom: -4px;
+      width: 2px;
+      background: #f87171;
+      left: 5%;
+      transition: left 0.2s;
+      border-radius: 1px;
+    }
+    #threshold-line::after {
+      content: '▼';
+      position: absolute;
+      top: -16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 8px;
+      color: #f87171;
+    }
+    #meter-rms {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 6px;
+      text-align: center;
+    }
+
+    /* STATS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .stat-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .stat-card .stat-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+    }
+    .stat-card .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stat-card .stat-unit { font-size: 0.75rem; color: var(--muted); }
+
+    /* CONNECTION STATUS */
+    .conn-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--surface2);
+    }
+    .conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+    .conn-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .conn-dot.error { background: var(--red); }
+
+    /* RIGHT COLUMN */
+    .right-col { display: flex; flex-direction: column; gap: 20px; }
+
+    /* LOGS TABLE */
+    .table-wrap {
+      overflow-x: auto;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      min-width: 900px;
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      background: rgba(15,10,30,0.95);
+      backdrop-filter: blur(10px);
+      padding: 10px 12px;
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      z-index: 1;
+    }
+    tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.1s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td {
+      padding: 10px 12px;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    td.num { font-variant-numeric: tabular-nums; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+    td.transcript { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge-good { color: var(--green); font-weight: 600; }
+    .badge-acceptable { color: var(--yellow); font-weight: 600; }
+    .badge-slow { color: var(--red); font-weight: 600; }
+    .badge-error { color: var(--red); opacity: 0.7; }
+
+    /* TOAST */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999;
+    }
+    .toast {
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      animation: toastIn 0.25s ease;
+      max-width: 360px;
+    }
+    .toast.info { background: rgba(96,165,250,0.2); border: 1px solid var(--blue); color: var(--blue); }
+    .toast.success { background: rgba(74,222,128,0.2); border: 1px solid var(--green); color: var(--green); }
+    .toast.error { background: rgba(248,113,113,0.2); border: 1px solid var(--red); color: var(--red); }
+    .toast.warn { background: rgba(250,204,21,0.2); border: 1px solid var(--yellow); color: var(--yellow); }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    .section-sep { margin: 16px 0; border: none; border-top: 1px solid var(--border); }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      body { padding: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎙️ Interpreter Latency Test Rig</h1>
+    <p>Indonesian → English · gpt-realtime-translate · Measure dead-air gap with ms precision</p>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+      <!-- State -->
+      <div class="card">
+        <div class="card-title">Current State</div>
+        <div id="state-badge">
+          <span class="dot"></span>
+          <span id="state-label">IDLE</span>
+        </div>
+        <hr class="section-sep" />
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="card-title" style="margin:0">Connection</div>
+          <div class="conn-status">
+            <span class="conn-dot" id="conn-dot"></span>
+            <span id="conn-label">Disconnected</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Config -->
+      <div class="card">
+        <div class="card-title">Configuration</div>
+
+        <div class="config-row">
+          <label>Silence Threshold <span id="silence-val">1500</span> ms</label>
+          <input type="range" id="silence-slider" min="500" max="2500" step="50" value="1500" />
+        </div>
+
+        <div class="config-row">
+          <label>Amplitude Threshold <span id="amp-val">0.05</span></label>
+          <input type="range" id="amp-slider" min="1" max="20" step="1" value="5" />
+        </div>
+
+        <div class="config-row">
+          <label>Target Language</label>
+          <select disabled>
+            <option value="en">English (en) — v1 only</option>
+          </select>
+        </div>
+
+        <hr class="section-sep" />
+
+        <!-- Mic meter -->
+        <div class="card-title">Microphone Level</div>
+        <div class="meter-wrap">
+          <div id="meter-fill"></div>
+          <div id="threshold-line"></div>
+        </div>
+        <div id="meter-rms">RMS: 0.000 | Threshold: 0.050</div>
+
+        <hr class="section-sep" />
+
+        <!-- Buttons -->
+        <div class="btn-group">
+          <button id="btn-start">▶ Start Recording</button>
+          <button id="btn-reset">↺ Reset Session</button>
+          <button id="btn-export">⬇ Export JSON</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+      <!-- Stats -->
+      <div class="card">
+        <div class="card-title">Session Statistics</div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Avg First Byte Latency</div>
+            <div><span class="stat-value" id="stat-first-byte">—</span> <span class="stat-unit">ms</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Avg Total Gap</div>
+            <div><span class="stat-value" id="stat-total-gap">—</span> <span class="stat-unit">ms</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Total Turns</div>
+            <div><span class="stat-value" id="stat-turns">0</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">P95 Total Gap</div>
+            <div><span class="stat-value" id="stat-p95">—</span> <span class="stat-unit">ms</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Logs table -->
+      <div class="card" style="flex:1">
+        <div class="card-title">Turn Log</div>
+        <div class="table-wrap">
+          <table id="log-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>State</th>
+                <th>Speech (ms)</th>
+                <th>1st Byte (ms)</th>
+                <th>Model Total (ms)</th>
+                <th>Total Gap (ms)</th>
+                <th>Playback (ms)</th>
+                <th>Full Cycle (ms)</th>
+                <th>Source (ID)</th>
+                <th>Result (EN)</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="log-body">
+              <tr>
+                <td colspan="11" style="text-align:center;color:var(--muted);padding:40px 0;">
+                  No turns recorded yet. Press "Start Recording" and speak in Indonesian.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+<script>
+// ─── CONFIG ────────────────────────────────────────────────────────────────
+const config = {
+  silenceThreshold: 1500,
+  amplitudeThreshold: 0.05,
+  targetLanguage: 'en',
+  sampleRate: 24000,
+};
+
+// ─── STATE MACHINE ─────────────────────────────────────────────────────────
+const STATE = {
+  IDLE: 'idle',
+  LISTENING: 'listening',
+  SILENCE_DETECTED: 'silence-detected',
+  SENDING: 'sending',
+  WAITING: 'waiting',
+  STREAMING: 'streaming',
+  COMPLETE: 'complete',
+  PLAYING: 'playing',
+  ERROR: 'error',
+};
+
+let currentState = STATE.IDLE;
+
+const STATE_LABELS = {
+  [STATE.IDLE]: 'IDLE',
+  [STATE.LISTENING]: 'LISTENING',
+  [STATE.SILENCE_DETECTED]: 'SILENCE DETECTED',
+  [STATE.SENDING]: 'SENDING',
+  [STATE.WAITING]: 'WAITING',
+  [STATE.STREAMING]: 'STREAMING',
+  [STATE.COMPLETE]: 'COMPLETE',
+  [STATE.PLAYING]: 'PLAYING',
+  [STATE.ERROR]: 'ERROR',
+};
+
+function updateState(newState) {
+  currentState = newState;
+  const badge = document.getElementById('state-badge');
+  badge.className = `state-${newState}`;
+  document.getElementById('state-label').textContent = STATE_LABELS[newState] || newState.toUpperCase();
+}
+
+// ─── TURN DATA ─────────────────────────────────────────────────────────────
+let turns = [];
+let currentTurn = null;
+
+function newTurn() {
+  return {
+    index: turns.length + 1,
+    timestamps: {
+      t_speech_start: null,
+      t_speech_end: null,
+      t_send_complete: null,
+      t_first_response_byte: null,
+      t_response_complete: null,
+      t_playback_start: null,
+      t_playback_end: null,
+      t_mic_reenabled: null,
+    },
+    metrics: {},
+    transcripts: { source: '', result: '' },
+    audioChunks: [],
+    status: 'pending',
+  };
+}
+
+function calcMetrics(turn) {
+  const t = turn.timestamps;
+  const m = {};
+  if (t.t_speech_start && t.t_speech_end)
+    m.speech_duration = t.t_speech_end - t.t_speech_start;
+  if (t.t_first_response_byte && t.t_send_complete)
+    m.model_first_byte_latency = t.t_first_response_byte - t.t_send_complete;
+  if (t.t_response_complete && t.t_send_complete)
+    m.model_total_response_latency = t.t_response_complete - t.t_send_complete;
+  if (t.t_playback_start && t.t_first_response_byte)
+    m.playback_start_delay = t.t_playback_start - t.t_first_response_byte;
+  if (t.t_playback_start && t.t_speech_end)
+    m.total_turn_gap = t.t_playback_start - t.t_speech_end;
+  if (t.t_playback_end && t.t_playback_start)
+    m.playback_duration = t.t_playback_end - t.t_playback_start;
+  if (t.t_mic_reenabled && t.t_speech_start)
+    m.full_cycle_time = t.t_mic_reenabled - t.t_speech_start;
+  turn.metrics = m;
+
+  if (m.total_turn_gap !== undefined) {
+    if (m.total_turn_gap < 2000) turn.status = 'good';
+    else if (m.total_turn_gap < 3500) turn.status = 'acceptable';
+    else turn.status = 'slow';
+  }
+}
+
+// ─── AUDIO ─────────────────────────────────────────────────────────────────
+let audioCtx = null;
+let micStream = null;
+let scriptProcessor = null;
+let audioBuffer = []; // Float32 chunks while listening
+let silenceTimer = null;
+let isRecording = false;
+let micEnabled = true;
+
+async function startAudio() {
+  try {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, sampleRate: config.sampleRate }
+    });
+    audioCtx = new AudioContext({ sampleRate: config.sampleRate });
+    const source = audioCtx.createMediaStreamSource(micStream);
+    scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+    source.connect(scriptProcessor);
+    scriptProcessor.connect(audioCtx.destination);
+
+    scriptProcessor.onaudioprocess = onAudioProcess;
+    isRecording = true;
+    updateConn(true);
+    notify('Microphone active', 'success');
+  } catch (err) {
+    notify('Mic error: ' + err.message, 'error');
+    updateState(STATE.ERROR);
+  }
+}
+
+function stopAudio() {
+  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  isRecording = false;
+}
+
+function onAudioProcess(e) {
+  if (!micEnabled) return;
+  const data = e.inputBuffer.getChannelData(0);
+  const rms = calcRMS(data);
+  updateMeter(rms);
+
+  if (currentState === STATE.IDLE) {
+    if (rms > config.amplitudeThreshold) {
+      startNewTurn();
+    }
+  } else if (currentState === STATE.LISTENING) {
+    // buffer audio
+    audioBuffer.push(new Float32Array(data));
+    if (rms > config.amplitudeThreshold) {
+      clearTimeout(silenceTimer);
+      silenceTimer = null;
+    } else {
+      if (!silenceTimer) {
+        silenceTimer = setTimeout(handleSilenceDetected, config.silenceThreshold);
+      }
+    }
+  }
+}
+
+function calcRMS(data) {
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+  return Math.sqrt(sum / data.length);
+}
+
+function startNewTurn() {
+  clearTimeout(silenceTimer);
+  silenceTimer = null;
+  audioBuffer = [];
+  currentTurn = newTurn();
+  currentTurn.timestamps.t_speech_start = performance.now();
+  updateState(STATE.LISTENING);
+}
+
+function handleSilenceDetected() {
+  if (currentState !== STATE.LISTENING) return;
+  updateState(STATE.SILENCE_DETECTED);
+  currentTurn.timestamps.t_speech_end = performance.now();
+  micEnabled = false; // mute mic
+  clearTimeout(silenceTimer);
+  silenceTimer = null;
+  sendAudio();
+}
+
+// ─── AUDIO CONVERSION ──────────────────────────────────────────────────────
+function float32ToPCM16(float32Array) {
+  const pcm = new Int16Array(float32Array.length);
+  for (let i = 0; i < float32Array.length; i++) {
+    const s = Math.max(-1, Math.min(1, float32Array[i]));
+    pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+  }
+  return pcm;
+}
+
+function base64EncodeAudio(chunks) {
+  // Concat all Float32 chunks
+  let totalLen = 0;
+  for (const c of chunks) totalLen += c.length;
+  const merged = new Float32Array(totalLen);
+  let offset = 0;
+  for (const c of chunks) { merged.set(c, offset); offset += c.length; }
+  const pcm = float32ToPCM16(merged);
+  const bytes = new Uint8Array(pcm.buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(b64) {
+  const binary = atob(b64);
+  const buf = new ArrayBuffer(binary.length);
+  const view = new Uint8Array(buf);
+  for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+  return buf;
+}
+
+// PCM16 → WAV for decodeAudioData
+function pcm16ToWav(pcmBuffer, sampleRate) {
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataLen = pcmBuffer.byteLength;
+  const buf = new ArrayBuffer(44 + dataLen);
+  const view = new DataView(buf);
+  function writeStr(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataLen, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataLen, true);
+  new Uint8Array(buf, 44).set(new Uint8Array(pcmBuffer));
+  return buf;
+}
+
+// ─── WEBSOCKET ─────────────────────────────────────────────────────────────
+let ws = null;
+let clientSecret = null;
+
+async function initWebSocket() {
+  try {
+    notify('Connecting to OpenAI...', 'info');
+    const res = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetLanguage: config.targetLanguage }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.details || data.error || 'Session failed');
+    clientSecret = data.client_secret;
+
+    ws = new WebSocket(
+      `wss://api.openai.com/v1/realtime/translations?model=gpt-4o-realtime-preview-2025-06-03`,
+      ['realtime', `openai-insecure-api-key.${clientSecret}`, 'openai-beta.realtime-v1']
+    );
+
+    ws.onopen = () => {
+      updateConn(true);
+      notify('Connected to OpenAI Realtime', 'success');
+      ws.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          input_audio_format: 'pcm16',
+          output_audio_format: 'pcm16',
+          input_audio_transcription: { model: 'whisper-1' },
+          turn_detection: null,
+        }
+      }));
+    };
+
+    ws.onmessage = onWSMessage;
+
+    ws.onerror = (e) => {
+      notify('WebSocket error', 'error');
+      updateState(STATE.ERROR);
+      updateConn(false);
+    };
+
+    ws.onclose = () => {
+      updateConn(false);
+      if (currentState !== STATE.IDLE && currentState !== STATE.ERROR) {
+        notify('WebSocket closed', 'warn');
+      }
+    };
+  } catch (err) {
+    notify('Connection failed: ' + err.message, 'error');
+    updateState(STATE.ERROR);
+    updateConn(false);
+  }
+}
+
+function onWSMessage(event) {
+  let msg;
+  try { msg = JSON.parse(event.data); } catch { return; }
+
+  switch (msg.type) {
+    case 'response.audio.delta':
+      if (!currentTurn) break;
+      if (!currentTurn.timestamps.t_first_response_byte) {
+        currentTurn.timestamps.t_first_response_byte = performance.now();
+        updateState(STATE.STREAMING);
+      }
+      currentTurn.audioChunks.push(msg.delta);
+      break;
+
+    case 'response.text.delta':
+      if (currentTurn) currentTurn.transcripts.result += msg.delta || '';
+      break;
+
+    case 'conversation.item.input_audio_transcription.delta':
+      if (currentTurn) currentTurn.transcripts.source += msg.delta || '';
+      break;
+
+    case 'conversation.item.input_audio_transcription.completed':
+      if (currentTurn) currentTurn.transcripts.source = msg.transcript || currentTurn.transcripts.source;
+      break;
+
+    case 'response.audio_transcript.delta':
+      if (currentTurn) currentTurn.transcripts.result += msg.delta || '';
+      break;
+
+    case 'response.audio_transcript.done':
+      if (currentTurn) currentTurn.transcripts.result = msg.transcript || currentTurn.transcripts.result;
+      break;
+
+    case 'response.done':
+      if (!currentTurn) break;
+      currentTurn.timestamps.t_response_complete = performance.now();
+      updateState(STATE.COMPLETE);
+      playTranslatedAudio();
+      break;
+
+    case 'error':
+      notify('API error: ' + (msg.error?.message || JSON.stringify(msg.error)), 'error');
+      updateState(STATE.ERROR);
+      reenableMic();
+      break;
+
+    default:
+      break;
+  }
+}
+
+async function sendAudio() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    notify('WebSocket not open — reconnecting...', 'warn');
+    await initWebSocket();
+    await new Promise(r => setTimeout(r, 800));
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      notify('Cannot send — WebSocket not ready', 'error');
+      updateState(STATE.ERROR);
+      reenableMic();
+      return;
+    }
+  }
+
+  updateState(STATE.SENDING);
+  const b64 = base64EncodeAudio(audioBuffer);
+  audioBuffer = [];
+
+  ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: b64 }));
+  ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
+  ws.send(JSON.stringify({ type: 'response.create' }));
+
+  currentTurn.timestamps.t_send_complete = performance.now();
+  updateState(STATE.WAITING);
+}
+
+// ─── PLAYBACK ──────────────────────────────────────────────────────────────
+async function playTranslatedAudio() {
+  if (!currentTurn || currentTurn.audioChunks.length === 0) {
+    notify('No audio received', 'warn');
+    finalizeTurn('error');
+    return;
+  }
+
+  updateState(STATE.PLAYING);
+  currentTurn.timestamps.t_playback_start = performance.now();
+
+  try {
+    // Combine all base64 PCM16 chunks
+    const totalBytes = currentTurn.audioChunks.reduce((acc, b64) => acc + atob(b64).length, 0);
+    const combined = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const b64 of currentTurn.audioChunks) {
+      const bin = atob(b64);
+      for (let i = 0; i < bin.length; i++) combined[offset++] = bin.charCodeAt(i);
+    }
+
+    const wavBuf = pcm16ToWav(combined.buffer, config.sampleRate);
+    const playCtx = new AudioContext();
+    const decoded = await playCtx.decodeAudioData(wavBuf);
+    const source = playCtx.createBufferSource();
+    source.buffer = decoded;
+    source.connect(playCtx.destination);
+
+    source.onended = () => {
+      currentTurn.timestamps.t_playback_end = performance.now();
+      playCtx.close();
+      finalizeTurn('ok');
+    };
+
+    source.start(0);
+  } catch (err) {
+    notify('Playback error: ' + err.message, 'error');
+    finalizeTurn('error');
+  }
+}
+
+function finalizeTurn(result) {
+  if (!currentTurn) return;
+  currentTurn.timestamps.t_mic_reenabled = performance.now();
+  if (result === 'error') currentTurn.status = 'error';
+  else calcMetrics(currentTurn);
+  turns.push(currentTurn);
+  addTurnToLog(currentTurn);
+  updateStatsSummary();
+  currentTurn = null;
+  reenableMic();
+  updateState(STATE.IDLE);
+}
+
+function reenableMic() {
+  micEnabled = true;
+}
+
+// ─── UI ────────────────────────────────────────────────────────────────────
+function updateMeter(rms) {
+  const pct = Math.min(rms / 0.3, 1) * 100;
+  document.getElementById('meter-fill').style.width = pct + '%';
+  document.getElementById('meter-rms').textContent =
+    `RMS: ${rms.toFixed(3)} | Threshold: ${config.amplitudeThreshold.toFixed(3)}`;
+}
+
+function updateThresholdLine() {
+  const pct = Math.min(config.amplitudeThreshold / 0.3, 1) * 100;
+  document.getElementById('threshold-line').style.left = pct + '%';
+}
+
+function updateConn(connected) {
+  const dot = document.getElementById('conn-dot');
+  const label = document.getElementById('conn-label');
+  dot.className = 'conn-dot' + (connected ? ' connected' : '');
+  label.textContent = connected ? 'Connected' : 'Disconnected';
+}
+
+function addTurnToLog(turn) {
+  const tbody = document.getElementById('log-body');
+  // Remove placeholder
+  const placeholder = tbody.querySelector('[colspan]');
+  if (placeholder) placeholder.parentElement.remove();
+
+  const m = turn.metrics;
+  const fmt = v => (v !== undefined && v !== null) ? Math.round(v) : '—';
+  const statusClass = {
+    good: 'badge-good', acceptable: 'badge-acceptable',
+    slow: 'badge-slow', error: 'badge-error', pending: ''
+  }[turn.status] || '';
+
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="num">${turn.index}</td>
+    <td>${turn.status}</td>
+    <td class="num">${fmt(m.speech_duration)}</td>
+    <td class="num">${fmt(m.model_first_byte_latency)}</td>
+    <td class="num">${fmt(m.model_total_response_latency)}</td>
+    <td class="num ${statusClass}">${fmt(m.total_turn_gap)}</td>
+    <td class="num">${fmt(m.playback_duration)}</td>
+    <td class="num">${fmt(m.full_cycle_time)}</td>
+    <td class="transcript" title="${turn.transcripts.source}">${turn.transcripts.source || '—'}</td>
+    <td class="transcript" title="${turn.transcripts.result}">${turn.transcripts.result || '—'}</td>
+    <td class="${statusClass}">${turn.status.toUpperCase()}</td>
+  `;
+  tbody.insertBefore(tr, tbody.firstChild);
+}
+
+function updateStatsSummary() {
+  const gaps = turns.map(t => t.metrics.total_turn_gap).filter(v => v !== undefined);
+  const fb = turns.map(t => t.metrics.model_first_byte_latency).filter(v => v !== undefined);
+
+  const avg = arr => arr.length ? Math.round(arr.reduce((a,b) => a+b,0)/arr.length) : null;
+  const p95 = arr => {
+    if (!arr.length) return null;
+    const sorted = [...arr].sort((a,b) => a-b);
+    const idx = Math.ceil(sorted.length * 0.95) - 1;
+    return Math.round(sorted[Math.max(0,idx)]);
+  };
+
+  const set = (id, val) => {
+    document.getElementById(id).textContent = val !== null ? val : '—';
+  };
+  set('stat-first-byte', avg(fb));
+  set('stat-total-gap', avg(gaps));
+  set('stat-turns', turns.length);
+  set('stat-p95', p95(gaps));
+}
+
+function notify(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
+// ─── EXPORT ────────────────────────────────────────────────────────────────
+function exportMetrics() {
+  const gaps = turns.map(t => t.metrics.total_turn_gap).filter(v => v !== undefined);
+  const fb = turns.map(t => t.metrics.model_first_byte_latency).filter(v => v !== undefined);
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+  const p = (arr, pct) => {
+    if (!arr.length) return null;
+    const s = [...arr].sort((a,b)=>a-b);
+    return s[Math.ceil(s.length*pct/100)-1];
+  };
+
+  const data = {
+    session_info: {
+      exported_at: new Date().toISOString(),
+      config: { ...config },
+    },
+    summary: {
+      total_turns: turns.length,
+      first_byte_latency: { avg: avg(fb), min: Math.min(...fb)||null, max: Math.max(...fb)||null, p95: p(fb,95) },
+      total_turn_gap: { avg: avg(gaps), min: Math.min(...gaps)||null, max: Math.max(...gaps)||null, p95: p(gaps,95) },
+    },
+    turns: turns.map(t => ({
+      index: t.index,
+      timestamps: t.timestamps,
+      metrics: t.metrics,
+      transcripts: t.transcripts,
+      status: t.status,
+    })),
+  };
+
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `interpreter-latency-test-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  notify('Exported!', 'success');
+}
+
+// ─── CONTROLS ──────────────────────────────────────────────────────────────
+document.getElementById('silence-slider').addEventListener('input', e => {
+  config.silenceThreshold = parseInt(e.target.value);
+  document.getElementById('silence-val').textContent = config.silenceThreshold;
+});
+
+document.getElementById('amp-slider').addEventListener('input', e => {
+  config.amplitudeThreshold = parseInt(e.target.value) / 100;
+  document.getElementById('amp-val').textContent = config.amplitudeThreshold.toFixed(2);
+  updateThresholdLine();
+  document.getElementById('meter-rms').textContent =
+    `RMS: 0.000 | Threshold: ${config.amplitudeThreshold.toFixed(3)}`;
+});
+
+document.getElementById('btn-start').addEventListener('click', async () => {
+  document.getElementById('btn-start').disabled = true;
+  await startAudio();
+  await initWebSocket();
+  notify('Ready — speak in Indonesian!', 'success');
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  stopAudio();
+  if (ws) { ws.close(); ws = null; }
+  currentTurn = null;
+  audioBuffer = [];
+  clearTimeout(silenceTimer);
+  silenceTimer = null;
+  micEnabled = true;
+  isRecording = false;
+  updateState(STATE.IDLE);
+  updateConn(false);
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('meter-fill').style.width = '0%';
+  document.getElementById('meter-rms').textContent = 'RMS: 0.000 | Threshold: 0.050';
+  notify('Session reset', 'info');
+});
+
+document.getElementById('btn-export').addEventListener('click', exportMetrics);
+
+// Init threshold line position
+updateThresholdLine();
+</script>
+</body>
+</html>
