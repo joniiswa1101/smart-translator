@@ -830,6 +830,16 @@ function onWSMessage(event) {
       if (currentTurn) currentTurn.transcripts.source = msg.transcript || currentTurn.transcripts.source;
       break;
 
+    // Buffer committed — now safe to create a response
+    case 'input_audio_buffer.committed':
+      if (currentTurn && !responsePending) {
+        currentTurn.timestamps.t_send_complete = performance.now();
+        ws.send(JSON.stringify({ type: 'response.create' }));
+        responsePending = true;
+        updateState(STATE.WAITING);
+      }
+      break;
+
     // Response done
     case 'response.output_audio.done':
       // Only update completion flag; don't trigger playback yet
@@ -883,15 +893,13 @@ async function sendAudio() {
   const b64 = base64EncodeAudio(audioBuffer);
   audioBuffer = [];
 
+  // Clear any leftover server-side buffer first, then append + commit.
+  // response.create is sent only after we receive input_audio_buffer.committed
+  // to guarantee the buffer was accepted before creating a response.
+  ws.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
   ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: b64 }));
   ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-  if (!responsePending) {
-    ws.send(JSON.stringify({ type: 'response.create' }));
-    responsePending = true;
-  }
-
-  currentTurn.timestamps.t_send_complete = performance.now();
-  updateState(STATE.WAITING);
+  // t_send_complete and response.create happen in the committed handler below
 }
 
 // ─── PLAYBACK ──────────────────────────────────────────────────────────────
