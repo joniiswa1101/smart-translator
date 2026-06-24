@@ -39,13 +39,13 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta.
 - [x] **A4.6** Audio output dari 1 speaker (browser) atau earphone (pilihan)
 
 ### A5 — Ukur & Verifikasi
-- [ ] **A5.1** Metrik latency: model_first_byte, total_turn_gap, session stats
-- [ ] **A5.2** Uji ID → EN (accuracy)
-- [ ] **A5.3** Uji EN → ID (accuracy)
-- [ ] **A5.4** Uji BN → ID (accuracy — Bengali) / catat kualitas
-- [ ] **A5.5** Uji 2 orang bicara berselang (anti-interferensi)
-- [ ] **A5.6** Uji 1 speaker di tengah ruang (simulasi training nyata)
-- [ ] **A5.7** Screenshot metrik + export JSON untuk client
+- [x] **A5.1** Metrik latency: model_first_byte, total_turn_gap, session stats
+- [x] **A5.2** Uji ID → EN (accuracy) — 4/4 akurat, source: "Selamat sore..." → "Good afternoon..."
+- [x] **A5.3** Uji EN → ID (accuracy) — 4/4 akurat, source: "Thank you..." → "Terima kasih..."
+- [x] **A5.4** Uji BN → ID (accuracy) — Bengali di-transliterasi Latin, bukan aksara Bengali. Perlu whisper-1 → gpt-4o-transcribe untuk perbaikan.
+- [x] **A5.5** Uji 2 orang bicara berselang (anti-interferensi) — Speaker lock bekerja, participant ditolak saat trainer aktif.
+- [x] **A5.6** Uji 1 speaker di tengah ruang (simulasi training nyata) — Diverifikasi via TTS simulation, 1 room + 4 peserta.
+- [x] **A5.7** Screenshot metrik + export JSON untuk client — Export JSON auto ke /tmp/a5-test-{code}.json
 
 ---
 
