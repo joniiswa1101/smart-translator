@@ -534,6 +534,7 @@ function updateState(newState) {
 // ─── TURN DATA ─────────────────────────────────────────────────────────────
 let turns = [];
 let currentTurn = null;
+let responsePending = false; // true = response.create sudah dikirim, belum response.done
 
 function newTurn() {
   return {
@@ -856,13 +857,26 @@ async function sendAudio() {
     }
   }
 
+  // Check minimum audio buffer: 100ms at 24kHz = 2400 samples
+  const totalSamples = audioBuffer.reduce((acc, chunk) => acc + chunk.length, 0);
+  if (totalSamples < 2400) {
+    notify('Audio buffer too small (<' + Math.round(totalSamples/24) + 'ms). Speak longer.', 'warn');
+    reenableMic();
+    updateState(STATE.IDLE);
+    currentTurn = null;
+    return;
+  }
+
   updateState(STATE.SENDING);
   const b64 = base64EncodeAudio(audioBuffer);
   audioBuffer = [];
 
   ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: b64 }));
   ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-  ws.send(JSON.stringify({ type: 'response.create' }));
+  if (!responsePending) {
+    ws.send(JSON.stringify({ type: 'response.create' }));
+    responsePending = true;
+  }
 
   currentTurn.timestamps.t_send_complete = performance.now();
   updateState(STATE.WAITING);
@@ -919,6 +933,7 @@ function finalizeTurn(result) {
   addTurnToLog(currentTurn);
   updateStatsSummary();
   currentTurn = null;
+  responsePending = false;
   reenableMic();
   updateState(STATE.IDLE);
 }
