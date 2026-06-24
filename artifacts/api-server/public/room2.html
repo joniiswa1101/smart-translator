@@ -35,6 +35,33 @@
     header { text-align: center; margin-bottom: 28px; }
     header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     header p { color: var(--muted); font-size: 0.875rem; margin-top: 4px; }
+    .nav-bar {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .nav-bar a {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .nav-bar a.active {
+      background: var(--accent2);
+      color: white;
+    }
+    .nav-bar a.inactive {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .nav-bar a.inactive:hover {
+      background: var(--surface);
+      color: var(--text);
+    }
 
     .card {
       background: var(--surface);
@@ -159,6 +186,11 @@
     <header>
       <h1>Smart Translator B: Multi-output</h1>
       <p>Individu: tiap peserta dengar hanya bahasa-nya</p>
+      <div class="nav-bar">
+        <a href="/" class="inactive">Interpreter Test</a>
+        <a href="/room" class="inactive">Solusi A: Broadcast</a>
+        <a href="/room2" class="active">Solusi B: Multi-output</a>
+      </div>
     </header>
 
     <!-- SCREEN 1: Join Room -->

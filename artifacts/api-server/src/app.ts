@@ -50,4 +50,12 @@ app.get("/", (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
+app.get("/room", (_req, res) => {
+  res.sendFile(path.join(publicDir, "room.html"));
+});
+
+app.get("/room2", (_req, res) => {
+  res.sendFile(path.join(publicDir, "room2.html"));
+});
+
 export default app;

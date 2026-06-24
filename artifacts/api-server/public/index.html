@@ -54,6 +54,33 @@
       font-size: 0.875rem;
       margin-top: 4px;
     }
+    .nav-bar {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .nav-bar a {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .nav-bar a.active {
+      background: var(--accent2);
+      color: white;
+    }
+    .nav-bar a.inactive {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .nav-bar a.inactive:hover {
+      background: var(--surface);
+      color: var(--text);
+    }
 
     .grid {
       display: grid;
@@ -362,6 +389,11 @@
   <header>
     <h1>🎙️ Interpreter Latency Test Rig</h1>
     <p>Indonesian ↔ English · Auto-detect & bidirectional translate · Measure dead-air gap with ms precision</p>
+    <div class="nav-bar">
+      <a href="/" class="active">Interpreter Test</a>
+      <a href="/room" class="inactive">Solusi A: Broadcast</a>
+      <a href="/room2" class="inactive">Solusi B: Multi-output</a>
+    </div>
   </header>
 
   <div class="grid">
