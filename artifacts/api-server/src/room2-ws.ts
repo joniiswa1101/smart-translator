@@ -47,7 +47,7 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const type = msg.type;
 
     if (type === "room.join") {
-      const { code, name, role, spokenLang, hearLang } = msg;
+      const { code, name, role, spokenLang, hearLang, trainerMode } = msg;
       const targetRoom = getRoom2(code);
       if (!targetRoom) {
         ws.send(JSON.stringify({ type: "room.error", error: "Room not found" }));
@@ -57,6 +57,10 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       room = targetRoom;
       participantId = `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       participant = joinRoom2(room, participantId, name, role, spokenLang as Lang, hearLang as Lang, ws);
+      // If trainer joins with trainerMode, apply it to room state
+      if (role === "trainer" && trainerMode === true) {
+        room.trainerMode = true;
+      }
 
       ws.send(JSON.stringify({
         type: "room.joined",
@@ -65,6 +69,7 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         role,
         spokenLang,
         hearLang,
+        trainerMode: room.trainerMode,
         participants: getParticipantList2(room),
       }));
 

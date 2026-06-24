@@ -217,7 +217,7 @@
             <input type="checkbox" id="join-trainer-mode" style="width:auto;" />
             <span>Trainer Mode Auto (VAD otomatis)</span>
           </label>
-          <span style="font-size:0.75rem; color:var(--muted);">Trainer bicara tanpa klik tombol</span>
+          <span style="font-size:0.75rem; color:var(--muted);">Trainer: aktifkan mic sekali, VAD otomatis request/cancel</span>
         </div>
         <div class="form-row">
           <label>Bahasa Bicara</label>
@@ -427,6 +427,8 @@
       const row = document.getElementById('trainer-mode-row');
       row.style.display = role === 'trainer' ? 'flex' : 'none';
     }
+    // Show trainer mode checkbox on initial load (default role is trainer)
+    toggleTrainerModeUI();
 
     async function joinRoom() {
       const code = document.getElementById('join-code').value.trim().toUpperCase();
@@ -463,7 +465,8 @@
           name,
           role,
           spokenLang,
-          hearLang
+          hearLang,
+          trainerMode: myTrainerMode
         }));
       };
       ws.onmessage = (e) => {
@@ -495,9 +498,14 @@
       if (type === 'room.joined') {
         participantId = msg.participantId;
         participants = msg.participants || [];
+        myTrainerMode = msg.trainerMode || myTrainerMode;
         updateParticipants();
         showScreen('screen-room');
         notify(`Bergabung sebagai ${myName}`, 'success');
+        // Trainer mode: show hint that mic must be toggled on
+        if (myRole === 'trainer' && myTrainerMode) {
+          notify('Trainer mode: aktifkan mic sekali, bicara otomatis', 'info');
+        }
       }
       if (type === 'room.participant.joined') {
         participants.push(msg.participant);
@@ -606,7 +614,9 @@
         document.getElementById('mic-icon-off').classList.add('hidden');
         document.getElementById('mic-icon-on').classList.remove('hidden');
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        // Non-trainer mode: immediately request turn (push-to-talk)
+        // Trainer mode: do NOT request turn here; VAD will trigger it
+        if (ws && ws.readyState === WebSocket.OPEN && !myTrainerMode) {
           ws.send(JSON.stringify({ type: 'turn.request' }));
         }
       } catch (err) {
@@ -624,8 +634,19 @@
       document.getElementById('meter-bar').style.width = '0%';
 
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'turn.cancel' }));
+        // If we have buffered audio, commit it (process translation). Otherwise cancel.
+        if (bufferedSamples > 0) {
+          ws.send(JSON.stringify({ type: 'audio.commit' }));
+        } else {
+          ws.send(JSON.stringify({ type: 'turn.cancel' }));
+        }
       }
+      // Reset auto-turn state
+      autoTurnActive = false;
+      bufferedSamples = 0;
+      voicedFrames = 0;
+      silenceFrames = 0;
+      isVoiced = false;
     }
     // Auto-VAD: for trainer mode, automatically request turn when speech detected
     function startAutoTurn() {
