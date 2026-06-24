@@ -103,6 +103,16 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     }
 
     if (type === "turn.request") {
+      // Trainer mode: if trainer requests while busy, cancel current turn and grant
+      if (participant.role === "trainer" && room.trainerMode && (room.isListening || room.isProcessing || room.isPlaying)) {
+        // Cancel current speaker's turn
+        if (room.currentSpeaker && room.currentSpeaker !== participantId) {
+          const current = room.participants.get(room.currentSpeaker);
+          if (current) {
+            cancelTurn(room, current);
+          }
+        }
+      }
       if (room.isListening || room.isProcessing || room.isPlaying) {
         ws.send(JSON.stringify({ type: "turn.rejected", reason: "Busy" }));
         return;
@@ -158,6 +168,15 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     if (type === "turn.cancel") {
       if (room.currentSpeaker === participantId) {
         cancelTurn(room, participant);
+      }
+      return;
+    }
+
+    if (type === "room.trainerMode") {
+      if (participant.role === "trainer") {
+        room.trainerMode = msg.enabled === true;
+        broadcastToRoom(room, { type: "room.trainerMode", enabled: room.trainerMode });
+        logger.info({ roomCode: room.code, trainerMode: room.trainerMode }, "Trainer mode toggled");
       }
       return;
     }

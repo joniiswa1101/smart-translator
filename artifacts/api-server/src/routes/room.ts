@@ -23,6 +23,7 @@ router.get("/room/:code", (req, res) => {
     isListening: room.isListening,
     isProcessing: room.isProcessing,
     isPlaying: room.isPlaying,
+    trainerMode: room.trainerMode,
   });
 });
 

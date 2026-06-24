@@ -20,21 +20,17 @@ export interface Room {
   openaiWs: WebSocket | null;
   currentSpeaker: string | null;
   turnId: number;
-  // Audio buffer for current turn
   audioBuffer: Buffer[];
-  // Track state
   isListening: boolean;
   isProcessing: boolean;
   isPlaying: boolean;
-  // Turn log
   turns: Turn[];
-  // Current turn for transcript
   currentTurn: Turn | null;
-  // OpenAI session config
   openaiConfig: {
     model: string;
     instructions: string;
   };
+  trainerMode: boolean;
 }
 
 export interface Turn {
@@ -107,6 +103,7 @@ export function createRoom(): string {
       model: "gpt-realtime",
       instructions: getInstructions("id", "en"),
     },
+    trainerMode: false,
   };
   rooms.set(code, room);
   logger.info({ code }, "Room created");

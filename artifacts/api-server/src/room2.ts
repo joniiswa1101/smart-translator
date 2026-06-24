@@ -44,6 +44,7 @@ export interface Room2 {
   isPlaying: boolean;
   turns: Turn2[];
   currentTurn: Turn2 | null;
+  trainerMode: boolean;
 }
 
 function generateCode(): string {
@@ -102,6 +103,7 @@ export function createRoom2(): string {
     isPlaying: false,
     turns: [],
     currentTurn: null,
+    trainerMode: false,
   };
   rooms2.set(code, room);
   logger.info({ code }, "Room2 created");
