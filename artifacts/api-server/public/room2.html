@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Translator B: Multi-output</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0a1e;
+      --surface: rgba(255,255,255,0.06);
+      --surface2: rgba(255,255,255,0.10);
+      --border: rgba(255,255,255,0.12);
+      --accent: #a78bfa;
+      --accent2: #7c3aed;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --green: #4ade80;
+      --blue: #60a5fa;
+      --yellow: #facc15;
+      --red: #f87171;
+      --cyan: #22d3ee;
+      --orange: #fb923c;
+      --radius: 12px;
+    }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.3) 0%, transparent 60%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 28px; }
+    header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    header p { color: var(--muted); font-size: 0.875rem; margin-top: 4px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 16px; }
+
+    .join-form { display: flex; flex-direction: column; gap: 16px; }
+    .form-row { display: flex; gap: 12px; align-items: center; }
+    .form-row label { min-width: 140px; color: var(--muted); font-size: 0.85rem; }
+    input, select {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+    }
+    input:focus, select:focus { border-color: var(--accent); }
+    button {
+      background: var(--accent2);
+      border: none;
+      border-radius: 8px;
+      padding: 12px 24px;
+      color: white;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover { background: var(--accent); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: var(--surface2); border: 1px solid var(--border); }
+    button.secondary:hover { background: var(--surface); }
+    button.danger { background: var(--red); }
+
+    .room-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 8px 16px; border-radius: 999px;
+      background: rgba(167,139,250,0.15); border: 1px solid var(--accent);
+      color: var(--accent); font-weight: 600; font-size: 0.85rem;
+    }
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 20px; border-radius: 999px;
+      font-weight: 700; font-size: 1rem; text-transform: uppercase; letter-spacing: 1px;
+      width: 100%; justify-content: center; transition: all 0.25s ease;
+    }
+    .status-badge.idle { background: rgba(74,222,128,0.15); border: 2px solid var(--green); color: var(--green); }
+    .status-badge.listening { background: rgba(34,211,238,0.15); border: 2px solid var(--cyan); color: var(--cyan); }
+    .status-badge.processing { background: rgba(250,204,21,0.15); border: 2px solid var(--yellow); color: var(--yellow); }
+    .status-badge.playing { background: rgba(124,58,237,0.15); border: 2px solid var(--accent); color: var(--accent); }
+
+    .participant-list { display: flex; flex-direction: column; gap: 8px; }
+    .participant {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-radius: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+    }
+    .participant .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; background: var(--accent); color: white; }
+    .participant .info { flex: 1; }
+    .participant .name { font-weight: 600; font-size: 0.9rem; }
+    .participant .role { font-size: 0.75rem; color: var(--muted); }
+    .participant .badge {
+      padding: 4px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+      background: var(--surface); border: 1px solid var(--border);
+    }
+    .participant .badge.speaking { background: rgba(34,211,238,0.15); border-color: var(--cyan); color: var(--cyan); }
+    .participant .badge.me { background: rgba(74,222,128,0.15); border-color: var(--green); color: var(--green); }
+    .participant .badge.trainer { background: rgba(251,146,60,0.15); border-color: var(--orange); color: var(--orange); }
+
+    .mic-controls { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+    .mic-btn {
+      width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      border: none; cursor: pointer; transition: all 0.2s;
+    }
+    .mic-btn.on { background: var(--red); }
+    .mic-btn.on:hover { background: #dc2626; }
+    .mic-btn.off { background: var(--surface2); border: 2px solid var(--border); }
+    .mic-btn.off:hover { background: var(--surface); }
+    .mic-btn svg { width: 24px; height: 24px; fill: white; }
+
+    .meter-container {
+      flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; position: relative;
+    }
+    .meter-bar { height: 100%; background: var(--green); border-radius: 4px; transition: width 0.05s; width: 0%; }
+    .meter-threshold { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--red); opacity: 0.7; }
+
+    .transcript-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .transcript-table th { text-align: left; padding: 8px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }
+    .transcript-table td { padding: 8px; border-bottom: 1px solid var(--border); }
+    .transcript-table .speaker { font-weight: 600; color: var(--accent); }
+    .transcript-table .source { color: var(--muted); }
+    .transcript-table .translation { color: var(--text); }
+    .transcript-table .time { font-size: 0.75rem; color: var(--muted); }
+    .transcript-table .lang-tag { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: var(--surface2); }
+
+    .translation-pill {
+      display: inline-flex; gap: 6px; padding: 4px 10px; border-radius: 999px;
+      font-size: 0.75rem; margin: 2px 0;
+    }
+    .translation-pill .lang { font-weight: 700; opacity: 0.7; }
+    .translation-pill .text { font-weight: 500; }
+
+    #toast-container { position: fixed; top: 16px; right: 16px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+    .toast { padding: 12px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; animation: slideIn 0.3s; }
+    .toast.info { background: var(--blue); color: #0f172a; }
+    .toast.success { background: var(--green); color: #0f172a; }
+    .toast.error { background: var(--red); color: #0f172a; }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Smart Translator B: Multi-output</h1>
+      <p>Individu: tiap peserta dengar hanya bahasa-nya</p>
+    </header>
+
+    <!-- SCREEN 1: Join Room -->
+    <div id="screen-join" class="card">
+      <div class="card-title">Gabung ke Ruang</div>
+      <div class="join-form">
+        <div class="form-row">
+          <label>Kode Ruang</label>
+          <input id="join-code" type="text" placeholder="TR42" maxlength="10" />
+        </div>
+        <div class="form-row">
+          <label>Nama Anda</label>
+          <input id="join-name" type="text" placeholder="Nama Anda" maxlength="30" />
+        </div>
+        <div class="form-row">
+          <label>Peran</label>
+          <select id="join-role">
+            <option value="trainer">Trainer</option>
+            <option value="participant">Peserta</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Bahasa Bicara</label>
+          <select id="join-spoken">
+            <option value="id">Bahasa Indonesia</option>
+            <option value="en">English</option>
+            <option value="bn">Bengali (বাংলা)</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label>Bahasa Dengar</label>
+          <select id="join-hear">
+            <option value="id">Bahasa Indonesia</option>
+            <option value="en">English</option>
+            <option value="bn">Bengali (বাংলা)</option>
+          </select>
+        </div>
+        <button id="btn-join" onclick="joinRoom()">Gabung</button>
+        <div style="margin-top:8px; text-align:center;">
+          <button class="secondary" onclick="createRoom()">Atau Buat Ruang Baru</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCREEN 2: In Room -->
+    <div id="screen-room" class="hidden">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div class="room-badge">Ruang: <span id="room-code-display">-</span></div>
+          <button class="secondary" onclick="leaveRoom()">Keluar</button>
+        </div>
+        <div id="status-badge" class="status-badge idle">
+          <span class="dot">&#9679;</span>
+          <span id="status-text">IDLE</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Peserta di Ruang</div>
+        <div id="participant-list" class="participant-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Kontrol Saya</div>
+        <div style="display:flex; align-items:center; gap:16px;">
+          <div class="mic-controls">
+            <button id="btn-mic" class="mic-btn off" onclick="toggleMic()">
+              <svg id="mic-icon-off" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+              <svg id="mic-icon-on" class="hidden" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.65 1.65c-.67.33-1.41.53-2.3.53a5.98 5.98 0 0 1-5.94-5.24H5.01c.03.78.24 1.52.59 2.2L4.5 15.08c-.57-1.04-.88-2.23-.88-3.46h-2c0 1.63.42 3.16 1.15 4.52L1.7 17.78A9.962 9.962 0 0 0 11 21.95V24h2v-2.05a9.98 9.98 0 0 0 5.7-3.23l2.04 2.04L21.73 21 4.27 3z"/></svg>
+            </button>
+            <div class="meter-container">
+              <div class="meter-bar" id="meter-bar"></div>
+              <div class="meter-threshold" id="meter-threshold" style="left:20%"></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top:8px; font-size:0.8rem; color:var(--muted);">
+          <span id="my-info">-</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Statistik Sesi</div>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px;">
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Total Giliran</div>
+            <div id="stat-turns" style="font-size:1.5rem; font-weight:700; color:var(--accent);">0</div>
+          </div>
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Total Gap (avg)</div>
+            <div id="stat-total-gap" style="font-size:1.5rem; font-weight:700; color:var(--cyan);">-</div>
+          </div>
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Total Gap (p95)</div>
+            <div id="stat-p95" style="font-size:1.5rem; font-weight:700; color:var(--yellow);">-</div>
+          </div>
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Translasi</div>
+            <div id="stat-translations" style="font-size:1.5rem; font-weight:700; color:var(--green);">0</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="secondary" onclick="exportMetrics()">Export JSON</button>
+          <button class="secondary" onclick="clearMetrics()">Reset</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Log Transkrip</div>
+        <div style="max-height:400px; overflow-y:auto;">
+          <table class="transcript-table">
+            <thead>
+              <tr>
+                <th>Waktu</th>
+                <th>Pembicara</th>
+                <th>Sumber</th>
+                <th>Terjemahan</th>
+                <th>Gap</th>
+              </tr>
+            </thead>
+            <tbody id="transcript-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container"></div>
+  </div>
+
+  <script>
+    const STATE = { IDLE: 'idle', LISTENING: 'listening', PROCESSING: 'processing', PLAYING: 'playing' };
+    let state = STATE.IDLE;
+    let ws = null;
+    let roomCode = null;
+    let participantId = null;
+    let myRole = null;
+    let mySpokenLang = null;
+    let myHearLang = null;
+    let myName = null;
+    let participants = [];
+    let turns = [];
+    let currentTurnId = null;
+    let currentSpeakerId = null;
+    let translationCount = 0;
+
+    let audioCtx = null;
+    let micStream = null;
+    let scriptNode = null;
+    let analyser = null;
+    let micOn = false;
+    let audioQueue = [];
+    let isPlayingAudio = false;
+    let SAMPLE_RATE = 24000;
+
+    let smoothedRMS = 0;
+    let voicedFrames = 0;
+    let silenceFrames = 0;
+    let bufferedSamples = 0;
+    let isVoiced = false;
+    let turnTimer = null;
+    const MAX_TURN_SEC = 30000;
+    const VAD_ATTACK = 0.6;
+    const VAD_RELEASE = 0.2;
+    const AMPLITUDE_THRESHOLD = 0.02;
+    const SILENCE_FRAMES_THRESHOLD = 90;
+
+    function showScreen(id) {
+      document.querySelectorAll('[id^="screen-"]').forEach(el => el.classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
+    }
+    function notify(msg, type='info') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.textContent = msg;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+    function updateStatus(newState) {
+      state = newState;
+      const badge = document.getElementById('status-badge');
+      const text = document.getElementById('status-text');
+      badge.className = 'status-badge ' + newState;
+      const labels = { idle: 'IDLE', listening: 'LISTENING', processing: 'PROCESSING', playing: 'PLAYING' };
+      text.textContent = labels[newState] || newState.toUpperCase();
+    }
+    function updateParticipants() {
+      const list = document.getElementById('participant-list');
+      list.innerHTML = '';
+      participants.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'participant';
+        const isMe = p.id === participantId;
+        const isSpeaking = p.id === currentSpeakerId;
+        const isTrainer = p.role === 'trainer';
+        const badgeClass = isMe ? 'me' : (isTrainer ? 'trainer' : '');
+        const badgeText = isMe ? 'Saya' : (isTrainer ? 'Trainer' : 'Peserta');
+        const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+        const spoken = langName[p.spokenLang] || p.spokenLang;
+        const hear = langName[p.hearLang] || p.hearLang;
+        div.innerHTML = `
+          <div class="avatar">${p.name.charAt(0).toUpperCase()}</div>
+          <div class="info">
+            <div class="name">${p.name} ${isMe ? '(Anda)' : ''}</div>
+            <div class="role">${p.role === 'trainer' ? 'Trainer' : 'Peserta'} · Bicara: ${spoken} · Dengar: ${hear}</div>
+          </div>
+          <div class="badge ${badgeClass} ${isSpeaking ? 'speaking' : ''}">${isSpeaking ? 'MENGAKU' : badgeText}</div>
+        `;
+        list.appendChild(div);
+      });
+    }
+
+    async function createRoom() {
+      try {
+        const resp = await fetch('/api/room2', { method: 'POST' });
+        const data = await resp.json();
+        document.getElementById('join-code').value = data.code;
+        notify('Ruang dibuat: ' + data.code, 'success');
+      } catch (err) {
+        notify('Gagal buat ruang: ' + err.message, 'error');
+      }
+    }
+    async function joinRoom() {
+      const code = document.getElementById('join-code').value.trim().toUpperCase();
+      const name = document.getElementById('join-name').value.trim();
+      const role = document.getElementById('join-role').value;
+      const spokenLang = document.getElementById('join-spoken').value;
+      const hearLang = document.getElementById('join-hear').value;
+      if (!code || !name) {
+        notify('Masukkan kode ruang dan nama', 'error');
+        return;
+      }
+      if (spokenLang === hearLang) {
+        notify('Bahasa bicara dan dengar tidak boleh sama', 'error');
+        return;
+      }
+      roomCode = code;
+      myRole = role;
+      mySpokenLang = spokenLang;
+      myHearLang = hearLang;
+      myName = name;
+      document.getElementById('room-code-display').textContent = code;
+      const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+      document.getElementById('my-info').textContent = `${name} · ${role === 'trainer' ? 'Trainer' : 'Peserta'} · Bicara: ${langName[spokenLang]} · Dengar: ${langName[hearLang]}`;
+
+      const wsUrl = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/room2-ws';
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'room.join',
+          code,
+          name,
+          role,
+          spokenLang,
+          hearLang
+        }));
+      };
+      ws.onmessage = (e) => {
+        const msg = JSON.parse(e.data);
+        handleWsMessage(msg);
+      };
+      ws.onerror = () => {
+        notify('Koneksi error', 'error');
+      };
+      ws.onclose = () => {
+        notify('Terputus dari ruang', 'error');
+        showScreen('screen-join');
+      };
+    }
+    function leaveRoom() {
+      if (ws) {
+        ws.send(JSON.stringify({ type: 'room.leave' }));
+        ws.close();
+      }
+      micOn = false;
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      if (scriptNode) { scriptNode.disconnect(); scriptNode.onaudioprocess = null; }
+      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+      showScreen('screen-join');
+    }
+
+    function handleWsMessage(msg) {
+      const type = msg.type;
+      if (type === 'room.joined') {
+        participantId = msg.participantId;
+        participants = msg.participants || [];
+        updateParticipants();
+        showScreen('screen-room');
+        notify(`Bergabung sebagai ${myName}`, 'success');
+      }
+      if (type === 'room.participant.joined') {
+        participants.push(msg.participant);
+        updateParticipants();
+      }
+      if (type === 'room.participant.left') {
+        participants = participants.filter(p => p.id !== msg.participantId);
+        if (msg.participantId === currentSpeakerId) {
+          currentSpeakerId = null;
+          updateStatus(STATE.IDLE);
+        }
+        updateParticipants();
+      }
+      if (type === 'turn.granted') {
+        currentSpeakerId = msg.speakerId;
+        updateStatus(STATE.LISTENING);
+        if (msg.speakerId === participantId) {
+          notify('Giliran Anda bicara!', 'success');
+        } else {
+          notify(`${msg.speakerName} sedang bicara...`, 'info');
+        }
+        updateParticipants();
+      }
+      if (type === 'turn.processing') {
+        updateStatus(STATE.PROCESSING);
+        if (msg.speakerId === participantId) {
+          notify('Menerjemahkan...', 'info');
+        }
+      }
+      if (type === 'turn.completed') {
+        currentSpeakerId = null;
+        updateStatus(STATE.IDLE);
+        addTurnToLog(msg);
+        translationCount += msg.translations?.length || 0;
+        updateStats();
+        updateParticipants();
+      }
+      if (type === 'turn.cancelled') {
+        currentSpeakerId = null;
+        updateStatus(STATE.IDLE);
+        updateParticipants();
+      }
+      if (type === 'turn.rejected') {
+        notify('Sibuk, coba lagi', 'error');
+      }
+      if (type === 'response.audio.delta') {
+        if (msg.audio) {
+          audioQueue.push(msg.audio);
+          if (!isPlayingAudio) playAudioQueue();
+        }
+      }
+      if (type === 'turn.source.transcription') {
+        // source text available
+      }
+      if (type === 'room.error') {
+        notify('Error: ' + msg.error, 'error');
+      }
+      if (type === 'pipeline.error') {
+        notify('Pipeline error: ' + msg.error, 'error');
+      }
+    }
+
+    async function toggleMic() {
+      if (!micOn) await startMic();
+      else stopMic();
+    }
+    async function startMic() {
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: SAMPLE_RATE, channelCount: 1 } });
+        audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+        const source = audioCtx.createMediaStreamSource(micStream);
+        scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyser.connect(scriptNode);
+        scriptNode.connect(audioCtx.destination);
+
+        scriptNode.onaudioprocess = (e) => {
+          const inputData = e.inputBuffer.getChannelData(0);
+          processAudioFrame(inputData);
+        };
+
+        micOn = true;
+        document.getElementById('btn-mic').className = 'mic-btn on';
+        document.getElementById('mic-icon-off').classList.add('hidden');
+        document.getElementById('mic-icon-on').classList.remove('hidden');
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'turn.request' }));
+        }
+      } catch (err) {
+        notify('Mic gagal: ' + err.message, 'error');
+      }
+    }
+    function stopMic() {
+      micOn = false;
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      if (scriptNode) { scriptNode.disconnect(); scriptNode.onaudioprocess = null; }
+      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+      document.getElementById('btn-mic').className = 'mic-btn off';
+      document.getElementById('mic-icon-off').classList.remove('hidden');
+      document.getElementById('mic-icon-on').classList.add('hidden');
+      document.getElementById('meter-bar').style.width = '0%';
+
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'turn.cancel' }));
+      }
+    }
+
+    function processAudioFrame(inputData) {
+      let sum = 0;
+      for (let i = 0; i < inputData.length; i++) sum += inputData[i] * inputData[i];
+      const rms = Math.sqrt(sum / inputData.length);
+
+      if (rms > smoothedRMS) smoothedRMS = VAD_ATTACK * rms + (1 - VAD_ATTACK) * smoothedRMS;
+      else smoothedRMS = VAD_RELEASE * rms + (1 - VAD_RELEASE) * smoothedRMS;
+
+      const meterPct = Math.min(100, smoothedRMS * 4000);
+      document.getElementById('meter-bar').style.width = meterPct + '%';
+
+      const isFrameVoiced = smoothedRMS > AMPLITUDE_THRESHOLD;
+      if (isFrameVoiced) { voicedFrames++; silenceFrames = 0; }
+      else silenceFrames++;
+
+      if (isFrameVoiced && !isVoiced && voicedFrames > 2) isVoiced = true;
+      if (!isFrameVoiced && isVoiced && silenceFrames > SILENCE_FRAMES_THRESHOLD) {
+        isVoiced = false;
+        if (bufferedSamples > 0) commitAudio();
+      }
+
+      if (isVoiced || bufferedSamples > 0) {
+        const pcm16 = floatToPCM16(inputData);
+        const base64 = arrayBufferToBase64(pcm16);
+        if (ws && ws.readyState === WebSocket.OPEN && state === STATE.LISTENING && currentSpeakerId === participantId) {
+          ws.send(JSON.stringify({ type: 'audio.append', audio: base64 }));
+        }
+        bufferedSamples += inputData.length;
+      }
+      if (isVoiced && bufferedSamples > MAX_TURN_SEC * SAMPLE_RATE / 1000) commitAudio();
+    }
+
+    function commitAudio() {
+      if (ws && ws.readyState === WebSocket.OPEN && currentSpeakerId === participantId) {
+        ws.send(JSON.stringify({ type: 'audio.commit' }));
+      }
+      bufferedSamples = 0;
+      voicedFrames = 0;
+      silenceFrames = 0;
+      isVoiced = false;
+    }
+
+    function floatToPCM16(float32Array) {
+      const buffer = new ArrayBuffer(float32Array.length * 2);
+      const view = new DataView(buffer);
+      for (let i = 0; i < float32Array.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Array[i]));
+        view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+      return buffer;
+    }
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+      return btoa(binary);
+    }
+
+    async function playAudioQueue() {
+      if (isPlayingAudio || audioQueue.length === 0) return;
+      isPlayingAudio = true;
+      const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      const audioChunks = [];
+      while (audioQueue.length > 0) audioChunks.push(audioQueue.shift());
+      const combined = audioChunks.join('');
+      if (!combined) { isPlayingAudio = false; return; }
+      const binary = atob(combined);
+      const pcm16 = new Int16Array(binary.length);
+      for (let i = 0; i < binary.length; i++) pcm16[i] = binary.charCodeAt(i);
+      const float32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768;
+      const buffer = ctx.createBuffer(1, float32.length, SAMPLE_RATE);
+      buffer.copyToChannel(float32, 0);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.onended = () => {
+        isPlayingAudio = false;
+        if (audioQueue.length > 0) playAudioQueue();
+      };
+      source.start();
+    }
+
+    function addTurnToLog(turn) {
+      const tbody = document.getElementById('transcript-body');
+      const row = document.createElement('tr');
+      const time = new Date().toLocaleTimeString('id-ID');
+      const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+      const srcLang = langName[turn.sourceLang] || turn.sourceLang;
+      const gap = turn.totalGap ? turn.totalGap + 'ms' : '-';
+      const translations = (turn.translations || []).map(t => {
+        const l = langName[t.lang] || t.lang;
+        return `<div class="translation-pill"><span class="lang">${l}</span> <span class="text">${t.text}</span></div>`;
+      }).join('');
+      row.innerHTML = `
+        <td class="time">${time}</td>
+        <td class="speaker">${turn.speakerName}</td>
+        <td class="source"><span class="lang-tag">${srcLang}</span> ${turn.sourceText || '...'}</td>
+        <td class="translation">${translations}</td>
+        <td class="time">${gap}</td>
+      `;
+      tbody.insertBefore(row, tbody.firstChild);
+      updateStats();
+    }
+
+    function updateStats() {
+      const gaps = turns.map(t => t.totalGap).filter(v => v !== null && v !== undefined);
+      const avg = arr => arr.length ? Math.round(arr.reduce((a,b) => a+b,0)/arr.length) : null;
+      const p95 = arr => {
+        if (!arr.length) return null;
+        const sorted = [...arr].sort((a,b) => a-b);
+        const idx = Math.ceil(sorted.length * 0.95) - 1;
+        return Math.round(sorted[Math.max(0,idx)]);
+      };
+      document.getElementById('stat-turns').textContent = turns.length;
+      document.getElementById('stat-total-gap').textContent = avg(gaps) !== null ? avg(gaps) + 'ms' : '-';
+      document.getElementById('stat-p95').textContent = p95(gaps) !== null ? p95(gaps) + 'ms' : '-';
+      document.getElementById('stat-translations').textContent = translationCount;
+    }
+    function clearMetrics() {
+      turns = [];
+      translationCount = 0;
+      document.getElementById('transcript-body').innerHTML = '';
+      updateStats();
+      notify('Metrik direset', 'info');
+    }
+    function exportMetrics() {
+      const gaps = turns.map(t => t.totalGap).filter(v => v !== null && v !== undefined);
+      const avg = arr => arr.length ? arr.reduce((a,b) => a+b,0)/arr.length : null;
+      const p = (arr, pct) => {
+        if (!arr.length) return null;
+        const s = [...arr].sort((a,b)=>a-b);
+        return s[Math.ceil(s.length*pct/100)-1];
+      };
+      const data = {
+        session_info: {
+          exported_at: new Date().toISOString(),
+          room_code: roomCode,
+          my_role: myRole,
+          my_spoken_lang: mySpokenLang,
+          my_hear_lang: myHearLang,
+          participant_count: participants.length,
+        },
+        summary: {
+          total_turns: turns.length,
+          total_turn_gap: { avg: avg(gaps), min: Math.min(...gaps)||null, max: Math.max(...gaps)||null, p95: p(gaps,95) },
+        },
+        turns: turns.map(t => ({
+          turnId: t.turnId,
+          speakerName: t.speakerName,
+          sourceLang: t.sourceLang,
+          sourceText: t.sourceText,
+          translations: t.translations,
+          totalGap: t.totalGap,
+          startedAt: t.startedAt,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `translator-b-session-${roomCode}-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify('Exported!', 'success');
+    }
+
+    showScreen('screen-join');
+  </script>
+</body>
+</html>

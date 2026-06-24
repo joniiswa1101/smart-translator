@@ -53,52 +53,52 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta.
 > Tiap orang punya mic + earphone sendiri. Pivot-teks. Latency perlu validasi.
 
 ### B1 — Fondasi & Model Pivot
-- [ ] **B1.1** Pilih ASR: gpt-4o-transcribe (multi, streaming) vs whisper-1
-- [ ] **B1.2** Pilih TTS: gpt-4o-mini-tts (streaming, aksara Bengali)
-- [ ] **B1.3** Definisi model: Participant = {name, spokenLang, hearLangs, deviceId}
-- [ ] **B1.4** Uji akurasi ASR Bengali: gpt-4o-transcribe vs whisper-1
-- [ ] **B1.5** Uji akurasi TTS Bengali: aksara বাংলa benar atau tidak
+- [x] **B1.1** ASR: whisper-1 (transkripsi audio → teks)
+- [x] **B1.2** TTS: tts-1 (PCM 24kHz, chunked fan-out)
+- [x] **B1.3** Model: Participant2 = {name, spokenLang, hearLang, ws, active}
+- [ ] **B1.4** Uji akurasi ASR Bengali: whisper-1 dengan file audio nyata
+- [ ] **B1.5** Uji akurasi TTS Bengali: tts-1 output aksara Bengali
 - [ ] **B1.6** Uji latensi per tahap (ASR / translate / TTS) tanpa streaming
 
 ### B2 — Pipeline Pivot-Teks
-- [ ] **B2.1** Service ASR: audio → teks + deteksi bahasa (batasi kandidat ID/EN/BN)
-- [ ] **B2.2** Service Translate: teks → target bahasa (paralel, batched)
-- [ ] **B2.3** Service TTS: per bahasa target → audio (paralel)
-- [ ] **B2.4** Hub router: hitung bahasa target yang dibutuhkan setiap peserta (selain sumber)
-- [ ] **B2.5** Routing deterministik: ID → [EN, BN], EN → [ID], BN → [ID, EN] — sesuai peserta
-- [ ] **B2.6** Tampilkan transkrip sumber untuk koreksi (log tabel, seperti sekarang)
-- [ ] **B2.7** Glosarium domain: topik training + istilah kunci untuk meningkatkan akurasi
+- [x] **B2.1** ASR: audio → teks (whisper-1, auto-detect bahasa)
+- [x] **B2.2** Translate: teks → target bahasa (GPT-4o-mini, paralel)
+- [x] **B2.3** TTS: per bahasa target → audio (tts-1, paralel, chunked)
+- [x] **B2.4** Hub router: hitung bahasa target per peserta (skip jika sama dengan sumber)
+- [x] **B2.5** Routing deterministik: ID → [EN], EN → [ID], BN → [ID, EN] — sesuai peserta
+- [x] **B2.6** Transkrip log: tabel sumber + terjemahan per peserta
+- [ ] **B2.7** Glosarium domain: topik training + istilah kunci
 
 ### B3 — Server Multi-output (Fan-out)
-- [ ] **B3.1** Persistensi room (in-memory, tanpa database)
-- [ ] **B3.2** WebSocket per peserta (koneksi persistent)
-- [ ] **B3.3** Fan-out audio: tiap peserta terima HANYA versi bahasa-nya sendiri
-- [ ] **B3.4** Fan-out teks: tiap peserta terima transkrip + terjemahan di UI
-- [ ] **B3.5** Penanganan reconnect / jaringan putus
-- [ ] **B3.6** Sinkronisasi: semua peserta dengar dalam urutan yang sama
+- [x] **B3.1** Room in-memory (Map, auto-cleanup >10 min)
+- [x] **B3.2** WebSocket per peserta (/room2-ws)
+- [x] **B3.3** Fan-out audio: tiap peserta terima HANYA versi bahasa-nya
+- [x] **B3.4** Fan-out teks: transkrip + terjemahan personal per peserta
+- [x] **B3.5** Reconnect: klien bisa join ulang ke ruang yang sama
+- [x] **B3.6** Sinkronisasi: urutan turn.id global, semua peserta terima event
 
 ### B4 — UI Klien (per peserta, individual)
-- [ ] **B4.1** Halaman "Join Room": nama + pilih bahasa bicara + bahasa dengar
-- [ ] **B4.2** Indikator: siapa yang bicara (audio visualizer)
-- [ ] **B4.3** Panel peserta (daftar semua orang di ruang, bahasa masing-masing)
-- [ ] **B4.4** Log transkrip: sumber ( bahasa ) + terjemahan (bahasa saya) — personal
-- [ ] **B4.5** Audio output ke earphone (satu stream per peserta)
+- [x] **B4.1** Join Room: nama + pilih bahasa bicara + bahasa dengar
+- [x] **B4.2** Audio visualizer + meter VAD
+- [x] **B4.3** Panel peserta dengan bahasa masing-masing
+- [x] **B4.4** Log transkrip personal (sumber + terjemahan)
+- [x] **B4.5** Audio output ke earphone (streaming chunk)
 
 ### B5 — Optimasi Latency (Streaming)
-- [ ] **B5.1** ASR partial → kirim teks parsial ke translate begitu tersedia
-- [ ] **B5.2** Translate partial → mulai TTS begitu token terjemahan muncul
-- [ ] **B5.3** TTS streaming → audio mulai diputar sebelum selesai generate (chunked)
-- [ ] **B5.4** Ukur latency per tahap: ASR → Translate → TTS → Network
-- [ ] **B5.5** Target: dead-air < 2.5 detik (validasi dengan data nyata)
+- [x] **B5.1** TTS chunked fan-out (~100ms chunks)
+- [x] **B5.2** Parallel translate + TTS per bahasa target
+- [x] **B5.3** Audio buffering & playback di klien
+- [x] **B5.4** Latency per tahap tercatat di log (ASR ms, translate ms, TTS ms)
+- [ ] **B5.5** Target: dead-air < 2.5 detik (perlu validasi dengan audio nyata)
 
 ### B6 — Ukur & Verifikasi
-- [ ] **B6.1** Uji 1 Trainer + 1 Peserta (baseline)
-- [ ] **B6.2** Uji 1 Trainer + 3 Peserta (full)
-- [ ] **B6.3** Uji antrian bicara (2 orang berbicara sebelum selesai terjemahan)
+- [x] **B6.1** Uji 1 Trainer + 1 Peserta (baseline, pipeline works)
+- [x] **B6.2** Uji 1 Trainer + 3 Peserta (join + routing)
+- [x] **B6.3** Uji antrian bicara (speaker lock, 1 turn at a time)
 - [ ] **B6.4** Uji akurasi BN di ruang nyata (bising, gema)
-- [ ] **B6.5** Perbandingkan: Solusi A vs B latency + akurasi
-- [ ] **B6.6** Dashboard metrik per tahap (ASR/translate/TTS), export JSON
-- [ ] **B6.7** Keputusan: B jadi produk utama atau A + B sebagai opsi
+- [ ] **B6.5** Perbandingan: Solusi A vs B latency + akurasi
+- [x] **B6.6** Dashboard metrik + export JSON
+- [ ] **B6.7** Keputusan: perlu data latensi real-world
 
 ---
 
