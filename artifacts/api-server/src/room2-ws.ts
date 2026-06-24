@@ -2,6 +2,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { Server } from "http";
 import { IncomingMessage } from "http";
 import { logger } from "./lib/logger";
+import { buildGlossaryContext } from "./glossary";
 import {
   getRoom2,
   joinRoom2,
@@ -382,9 +383,10 @@ async function transcribeAudio(pcmBuffer: Buffer): Promise<string> {
 // ========== TRANSLATE ==========
 async function translateText(text: string, sourceLang: Lang, targetLang: Lang): Promise<string> {
   const langNames = { id: "Indonesian", en: "English", bn: "Bengali" };
-  const prompt = `Translate the following text from ${langNames[sourceLang]} to ${langNames[targetLang]}. Provide only the translation, no commentary:
+  const glossary = buildGlossaryContext(sourceLang, targetLang);
+  const prompt = `Translate the following text from ${langNames[sourceLang]} to ${langNames[targetLang]}. Provide only the translation, no commentary. Use the glossary terms exactly as given:
 
-${text}`;
+${text}${glossary}`;
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
