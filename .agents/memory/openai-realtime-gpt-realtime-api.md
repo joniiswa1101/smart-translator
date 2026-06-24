@@ -36,6 +36,23 @@ Audio out: `response.output_audio.delta` / `.done`. Transcript out: `response.ou
 Input transcript: `conversation.item.input_audio_transcription.delta` / `.completed`.
 Default audio format both directions: `{ type: 'audio/pcm', rate: 24000 }`.
 
+## Multi-turn state management (client-side VAD)
+Single-turn tests pass while consecutive turns fail — these races only surface across turns:
+- **Gate the next response on server truth, not local timing.** Track `activeResponseId` from
+  `response.created`; clear it (and `responsePending`) on `response.done`. Send `response.create`
+  only when BOTH are clear. Resetting `responsePending` only at playback-end desyncs from the server:
+  any early reset leaves the server's response open and every later `response.create` is rejected with
+  "Conversation already has an active response in progress: resp_… " (same id stuck across all later turns).
+- **Make `response.done` id-aware**: ignore a done whose id ≠ the tracked active id (a cancelled
+  response's late done can otherwise clear a newer turn's gates).
+- **No speculative `input_audio_buffer.clear`** on the normal send path — commit auto-clears the buffer,
+  and a stray clear interleaving with append/commit causes the "0.00ms" rejection. Clear only in explicit
+  recovery/reset.
+- **Wait for `session.updated` before sending audio** (a `sessionReady` flag), not a fixed delay. On
+  reconnect, appending before the config ack means default server-VAD briefly applies and reintroduces conflicts.
+- Centralize recovery (one `abortActiveTurn`): clear watchdog, cancel only if `activeResponseId` set,
+  clear input buffer, reset both gates. Wire it to ws.onerror/onclose, the watchdog timeout, and `error` events.
+
 ## Translation direction
 The model only translates Indonesian→English reliably when told to via `session.instructions`
 (e.g. "You are an Indonesian to English interpreter… respond only in English"). Without it, it acts

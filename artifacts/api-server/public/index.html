@@ -535,6 +535,7 @@ function updateState(newState) {
 let turns = [];
 let currentTurn = null;
 let responsePending = false; // true = response.create sudah dikirim, belum response.done
+let activeResponseId = null; // server-confirmed id of the in-flight response (from response.created)
 let turnWatchdog = null; // timer to recover from lost commit/response events
 const TURN_TIMEOUT_MS = 20000; // max wait for a turn to complete before aborting
 
@@ -553,17 +554,21 @@ function armTurnWatchdog() {
 // Centralized recovery: clears in-flight turn state and returns app to IDLE.
 function abortActiveTurn() {
   clearTurnWatchdog();
-  // Best-effort: cancel any active response + clear server buffer
+  // Best-effort: cancel any server-active response + clear server buffer so
+  // the next turn starts from a clean slate. We only cancel when the server
+  // has actually confirmed an active response (activeResponseId) to avoid
+  // cancelling nothing and confusing server state.
   if (ws && ws.readyState === WebSocket.OPEN) {
     try {
-      if (responsePending) ws.send(JSON.stringify({ type: 'response.cancel' }));
+      if (activeResponseId) ws.send(JSON.stringify({ type: 'response.cancel' }));
       ws.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
     } catch {}
   }
+  responsePending = false;
+  activeResponseId = null;
   if (currentTurn) {
     finalizeTurn('error');
   } else {
-    responsePending = false;
     reenableMic();
     updateState(STATE.IDLE);
   }
@@ -766,6 +771,7 @@ function pcm16ToWav(pcmBuffer, sampleRate) {
 // ─── WEBSOCKET ─────────────────────────────────────────────────────────────
 let ws = null;
 let clientSecret = null;
+let sessionReady = false; // true only after the server acks session.update (session.updated)
 
 async function initWebSocket() {
   try {
@@ -793,6 +799,7 @@ async function initWebSocket() {
 
     ws.onopen = () => {
       updateConn(true);
+      sessionReady = false; // wait for session.updated before sending audio
       notify('Connected to OpenAI Realtime', 'success');
       // Configure session as Indonesian → English interpreter.
       // turn_detection: null disables server-side VAD so this app's
@@ -873,9 +880,11 @@ function onWSMessage(event) {
       if (currentTurn) currentTurn.transcripts.source = msg.transcript || currentTurn.transcripts.source;
       break;
 
-    // Buffer committed — now safe to create a response
+    // Buffer committed — now safe to create a response. Gate on BOTH the local
+    // pending flag and the server-confirmed activeResponseId so we never send a
+    // second response.create while one is still open server-side.
     case 'input_audio_buffer.committed':
-      if (currentTurn && !responsePending) {
+      if (currentTurn && !responsePending && !activeResponseId) {
         currentTurn.timestamps.t_send_complete = performance.now();
         ws.send(JSON.stringify({ type: 'response.create' }));
         responsePending = true;
@@ -884,25 +893,47 @@ function onWSMessage(event) {
       }
       break;
 
+    // Session config (turn_detection:null etc.) acknowledged — only now is it
+    // safe to append/commit audio. Sending before this risks the server's
+    // default server-VAD briefly applying and reintroducing conflicts.
+    case 'session.updated':
+      sessionReady = true;
+      break;
+
+    // Server confirmed the response is now active — record its id so we can
+    // gate the next turn and cancel precisely if we need to recover.
+    case 'response.created':
+      activeResponseId = msg.response?.id || null;
+      break;
+
     // Response done
     case 'response.output_audio.done':
       // Only update completion flag; don't trigger playback yet
       break;
-    case 'response.done':
+    case 'response.done': {
+      // Ignore a stale response.done (e.g. from a previously cancelled response)
+      // that doesn't match the response we're currently tracking — otherwise it
+      // could wrongly clear the gates of a newer turn already in flight.
+      const doneId = msg.response?.id || null;
+      if (activeResponseId && doneId && doneId !== activeResponseId) break;
+      // Server has fully finished this response — clear in-flight gates now
+      // (the response is no longer active), then play the captured audio.
+      clearTurnWatchdog();
+      responsePending = false;
+      activeResponseId = null;
       if (!currentTurn) break;
       currentTurn.timestamps.t_response_complete = performance.now();
       updateState(STATE.COMPLETE);
       playTranslatedAudio();
       break;
+    }
 
     case 'error':
       notify('API error: ' + (msg.error?.message || JSON.stringify(msg.error)), 'error');
       updateState(STATE.ERROR);
-      if (currentTurn) {
-        finalizeTurn('error');
-      } else {
-        reenableMic();
-      }
+      // Route every error through the centralized recovery so server-side
+      // gates (active response + input buffer) are always reset together.
+      abortActiveTurn();
       break;
 
     default:
@@ -914,13 +945,19 @@ async function sendAudio() {
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     notify('WebSocket not open — reconnecting...', 'warn');
     await initWebSocket();
-    await new Promise(r => setTimeout(r, 800));
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      notify('Cannot send — WebSocket not ready', 'error');
-      updateState(STATE.ERROR);
-      reenableMic();
-      return;
-    }
+  }
+  // Wait until the socket is OPEN and the session.update is acknowledged
+  // (sessionReady). Polling beats a fixed delay: we never append audio before
+  // server-VAD is actually disabled, and we never wait longer than needed.
+  const deadline = performance.now() + 5000;
+  while ((!ws || ws.readyState !== WebSocket.OPEN || !sessionReady) && performance.now() < deadline) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+  if (!ws || ws.readyState !== WebSocket.OPEN || !sessionReady) {
+    notify('Cannot send — session not ready', 'error');
+    updateState(STATE.ERROR);
+    reenableMic();
+    return;
   }
 
   // Check minimum audio buffer: 100ms at 24kHz = 2400 samples
@@ -937,10 +974,11 @@ async function sendAudio() {
   const b64 = base64EncodeAudio(audioBuffer);
   audioBuffer = [];
 
-  // Defensive clear guarantees a clean server buffer even if a prior turn
-  // failed mid-flight. Then append + commit. response.create is sent only
-  // after we receive input_audio_buffer.committed (handler above).
-  ws.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+  // Append + commit only. The GA Realtime API auto-clears the input buffer on
+  // commit, so we must NOT send a speculative input_audio_buffer.clear here —
+  // a stray clear interleaving with append/commit empties the buffer and the
+  // server rejects the commit with "buffer too small ... 0.00ms". response.create
+  // is sent only after the input_audio_buffer.committed event (handler above).
   ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: b64 }));
   ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
   // Watchdog recovers the turn if committed/response events never arrive.
@@ -1160,9 +1198,12 @@ document.getElementById('btn-start').addEventListener('click', async () => {
 document.getElementById('btn-reset').addEventListener('click', () => {
   stopAudio();
   if (ws) { ws.close(); ws = null; }
+  clearTurnWatchdog();
+  sessionReady = false;
   currentTurn = null;
   audioBuffer = [];
   responsePending = false;
+  activeResponseId = null;
   clearTimeout(silenceTimer);
   silenceTimer = null;
   micEnabled = true;
