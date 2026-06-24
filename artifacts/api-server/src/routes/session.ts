@@ -24,7 +24,7 @@ router.post("/session", async (req, res) => {
     );
 
     if (resp.ok) {
-      const data = await resp.json();
+      const data: any = await resp.json();
       res.json({
         client_secret: data.client_secret?.value ?? data.client_secret,
         expires_at: data.expires_at,

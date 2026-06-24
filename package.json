@@ -9,11 +9,20 @@
     "dev": "NODE_ENV=development node server.js"
   },
   "dependencies": {
-    "express": "^5.0.0",
     "dotenv": "^16.4.5",
     "openai": "^4.52.7"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "catalog:",
+    "@types/ws": "^8.18.1",
+    "esbuild": "0.27.3",
+    "esbuild-plugin-pino": "^2.3.3",
+    "express": "^5.2.1",
+    "typescript": "^6.0.3",
+    "ws": "^8.21.0"
   }
 }

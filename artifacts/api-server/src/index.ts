@@ -1,5 +1,6 @@
 import app from "./app";
 import { attachWebSocketProxy } from "./ws";
+import { attachRoomWebSocket } from "./room-ws";
 import { logger } from "./lib/logger";
 
 const rawPort = process.env["PORT"];
@@ -25,5 +26,6 @@ const server = app.listen(port, (err) => {
   logger.info({ port }, "Server listening");
 });
 
-// Attach WebSocket proxy on the same port
+// Attach WebSocket proxies on the same port
 attachWebSocketProxy(server);
+attachRoomWebSocket(server);
