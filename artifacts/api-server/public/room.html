@@ -263,6 +263,33 @@
         </div>
       </div>
 
+      <!-- Stats -->
+      <div class="card">
+        <div class="card-title">Statistik Sesi</div>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px;">
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Total Giliran</div>
+            <div id="stat-turns" style="font-size:1.5rem; font-weight:700; color:var(--accent);">0</div>
+          </div>
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">First Byte (avg)</div>
+            <div id="stat-first-byte" style="font-size:1.5rem; font-weight:700; color:var(--green);">—</div>
+          </div>
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Total Gap (avg)</div>
+            <div id="stat-total-gap" style="font-size:1.5rem; font-weight:700; color:var(--cyan);">—</div>
+          </div>
+          <div style="background:var(--surface2); border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Total Gap (p95)</div>
+            <div id="stat-p95" style="font-size:1.5rem; font-weight:700; color:var(--yellow);">—</div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="secondary" onclick="exportMetrics()">Export JSON</button>
+          <button class="secondary" onclick="clearMetrics()">Reset</button>
+        </div>
+      </div>
+
       <!-- Transcripts -->
       <div class="card">
         <div class="card-title">Log Transkrip</div>
@@ -721,6 +748,73 @@
         <td class="time">${latency}</td>
       `;
       tbody.insertBefore(row, tbody.firstChild);
+      updateStats();
+    }
+
+    // ==================== METRICS ====================
+    function updateStats() {
+      const gaps = turns.map(t => t.totalGap).filter(v => v !== null && v !== undefined);
+      const fb = turns.map(t => t.firstByteLatency).filter(v => v !== null && v !== undefined);
+      const avg = arr => arr.length ? Math.round(arr.reduce((a,b) => a+b,0)/arr.length) : null;
+      const p95 = arr => {
+        if (!arr.length) return null;
+        const sorted = [...arr].sort((a,b) => a-b);
+        const idx = Math.ceil(sorted.length * 0.95) - 1;
+        return Math.round(sorted[Math.max(0,idx)]);
+      };
+      document.getElementById('stat-turns').textContent = turns.length;
+      document.getElementById('stat-first-byte').textContent = avg(fb) !== null ? avg(fb) + 'ms' : '—';
+      document.getElementById('stat-total-gap').textContent = avg(gaps) !== null ? avg(gaps) + 'ms' : '—';
+      document.getElementById('stat-p95').textContent = p95(gaps) !== null ? p95(gaps) + 'ms' : '—';
+    }
+    function clearMetrics() {
+      turns = [];
+      document.getElementById('transcript-body').innerHTML = '';
+      updateStats();
+      notify('Metrik direset', 'info');
+    }
+    function exportMetrics() {
+      const gaps = turns.map(t => t.totalGap).filter(v => v !== null && v !== undefined);
+      const fb = turns.map(t => t.firstByteLatency).filter(v => v !== null && v !== undefined);
+      const avg = arr => arr.length ? arr.reduce((a,b) => a+b,0)/arr.length : null;
+      const p = (arr, pct) => {
+        if (!arr.length) return null;
+        const s = [...arr].sort((a,b)=>a-b);
+        return s[Math.ceil(s.length*pct/100)-1];
+      };
+      const data = {
+        session_info: {
+          exported_at: new Date().toISOString(),
+          room_code: roomCode,
+          my_role: myRole,
+          my_lang: myLang,
+          participant_count: participants.length,
+        },
+        summary: {
+          total_turns: turns.length,
+          first_byte_latency: { avg: avg(fb), min: Math.min(...fb)||null, max: Math.max(...fb)||null, p95: p(fb,95) },
+          total_turn_gap: { avg: avg(gaps), min: Math.min(...gaps)||null, max: Math.max(...gaps)||null, p95: p(gaps,95) },
+        },
+        turns: turns.map(t => ({
+          turnId: t.turnId,
+          speakerName: t.speakerName,
+          sourceLang: t.sourceLang,
+          targetLang: t.targetLang,
+          sourceText: t.sourceText,
+          translationText: t.translationText,
+          firstByteLatency: t.firstByteLatency,
+          totalGap: t.totalGap,
+          startedAt: t.startedAt,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `translator-session-${roomCode}-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify('Exported!', 'success');
     }
 
     // ==================== INIT ====================
