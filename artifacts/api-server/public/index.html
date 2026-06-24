@@ -361,7 +361,7 @@
 <body>
   <header>
     <h1>🎙️ Interpreter Latency Test Rig</h1>
-    <p>Indonesian → English · gpt-realtime-translate · Measure dead-air gap with ms precision</p>
+    <p>Indonesian ↔ English · Auto-detect & bidirectional translate · Measure dead-air gap with ms precision</p>
   </header>
 
   <div class="grid">
@@ -476,7 +476,7 @@
             <tbody id="log-body">
               <tr>
                 <td colspan="11" style="text-align:center;color:var(--muted);padding:40px 0;">
-                  No turns recorded yet. Press "Start Recording" and speak in Indonesian.
+                  No turns recorded yet. Press "Start Recording" and speak in Indonesian or English.
                 </td>
               </tr>
             </tbody>
@@ -889,7 +889,7 @@ function onWSMessage(event) {
         type: 'session.update',
         session: {
           type: 'realtime',
-          instructions: 'You are an Indonesian to English interpreter. Translate Indonesian speech directly into natural English. Do not add extra commentary, do not say "here is the translation" or "okay" — just say the English translation itself.',
+          instructions: 'You are a bidirectional interpreter. Listen to the speaker. If the speaker speaks in Indonesian, translate directly into natural English. If the speaker speaks in English, translate directly into natural Indonesian. Do not add commentary, do not say "here is the translation" or "okay" — just say the translated sentence itself.',
           audio: {
             input: {
               transcription: { model: 'whisper-1' },
@@ -1194,7 +1194,7 @@ document.getElementById('btn-start').addEventListener('click', async () => {
   try {
     await startAudio();
     await initWebSocket();
-    notify('Ready — speak in Indonesian!', 'success');
+    notify('Ready — speak in Indonesian or English!', 'success');
   } catch (err) {
     notify('Setup failed: ' + err.message, 'error');
     updateState(STATE.ERROR);
