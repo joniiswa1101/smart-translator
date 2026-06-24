@@ -54,6 +54,24 @@ Single-turn tests pass while consecutive turns fail — these races only surface
   clear input buffer, reset both gates. Wire it to ws.onerror/onclose, the watchdog timeout, and `error` events.
 
 ## Translation direction
-The model only translates Indonesian→English reliably when told to via `session.instructions`
-(e.g. "You are an Indonesian to English interpreter… respond only in English"). Without it, it acts
-as a generic chat assistant and can reply in arbitrary languages.
+The model only translates reliably when told to via `session.instructions`. Without it, it acts
+as a generic chat assistant and can reply in arbitrary languages. **Bidirectional auto-detect works
+well**: a single instruction "if the speaker speaks Indonesian translate to English; if English
+translate to Indonesian" makes whisper-1 auto-detect the source and the model translate the opposite
+direction. Verified accurate both ways.
+
+## Verifying translation accuracy without a human (TTS-driven sim)
+Synthetic sine waves can NOT verify translation — there is no real speech. Instead generate real
+speech with OpenAI TTS and feed it through the same realtime flow:
+- `POST /v1/audio/speech` with `response_format: 'pcm'` returns raw PCM16 LE 24kHz mono — exactly the
+  realtime input format. Base64 it straight into `input_audio_buffer.append`, no resampling.
+- Drive the full manual flow (append→commit→wait committed→response.create) and read
+  `conversation.item.input_audio_transcription.completed` (source) + `response.output_audio_transcript.done` (result).
+
+## Late input transcription vs response.done
+`input_audio_transcription.completed` can arrive AFTER `response.done` (and after the turn is
+finalized/logged), leaving the Source cell blank. Fix: keep a `lastLoggedTurn` ref with its DOM row;
+if the completed transcript lands when `currentTurn` is null, patch the stored turn + its row cell.
+In the real UI playback delays finalize by seconds so it usually arrives in time, but the patch makes
+it robust. The empty Source in a TTS sim is partly an artifact of the test resolving on response.done
+with no playback wait.

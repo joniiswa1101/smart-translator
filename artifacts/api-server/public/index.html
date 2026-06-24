@@ -468,8 +468,8 @@
                 <th>Total Gap (ms)</th>
                 <th>Playback (ms)</th>
                 <th>Full Cycle (ms)</th>
-                <th>Source (ID)</th>
-                <th>Result (EN)</th>
+                <th>Source</th>
+                <th>Translation</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -534,6 +534,7 @@ function updateState(newState) {
 // ─── TURN DATA ─────────────────────────────────────────────────────────────
 let turns = [];
 let currentTurn = null;
+let lastLoggedTurn = null;
 let responsePending = false; // true = response.create sudah dikirim, belum response.done
 let activeResponseId = null; // server-confirmed id of the in-flight response (from response.created)
 let turnWatchdog = null; // timer to recover from lost commit/response events
@@ -864,7 +865,18 @@ function onWSMessage(event) {
       break;
 
     case 'conversation.item.input_audio_transcription.completed':
-      if (currentTurn) currentTurn.transcripts.source = msg.transcript || currentTurn.transcripts.source;
+      if (currentTurn) {
+        currentTurn.transcripts.source = msg.transcript || currentTurn.transcripts.source;
+      } else if (lastLoggedTurn && !lastLoggedTurn.transcripts.source && msg.transcript) {
+        // Whisper transcription can land after the turn was already finalized and
+        // logged (response.done fires before transcription completes). Patch the
+        // stored turn + its log row so the Source cell isn't left blank.
+        lastLoggedTurn.transcripts.source = msg.transcript;
+        if (lastLoggedTurn._row) {
+          const cell = lastLoggedTurn._row.querySelector('.transcript');
+          if (cell) { cell.textContent = msg.transcript; cell.title = msg.transcript; }
+        }
+      }
       break;
 
     // Buffer committed — now safe to create a response. Gate on BOTH the local
@@ -1043,6 +1055,7 @@ function finalizeTurn(result) {
     turns.push(currentTurn);
     addTurnToLog(currentTurn);
     updateStatsSummary();
+    lastLoggedTurn = currentTurn;
     currentTurn = null;
   }
   responsePending = false;
@@ -1101,6 +1114,7 @@ function addTurnToLog(turn) {
     <td class="transcript" title="${turn.transcripts.result}">${turn.transcripts.result || '—'}</td>
     <td class="${statusClass}">${turn.status.toUpperCase()}</td>
   `;
+  turn._row = tr;
   tbody.insertBefore(tr, tbody.firstChild);
 }
 
@@ -1208,6 +1222,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   clearTurnWatchdog();
   sessionReady = false;
   currentTurn = null;
+  lastLoggedTurn = null;
   audioBuffer = [];
   responsePending = false;
   activeResponseId = null;
