@@ -1,0 +1,1 @@
+- [OpenAI gpt-realtime API quirks](openai-realtime-gpt-realtime-api.md) — GA session config (audio.input.*, turn_detection:null for client VAD) + manual commit→committed→response.create flow

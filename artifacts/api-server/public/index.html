@@ -535,6 +535,39 @@ function updateState(newState) {
 let turns = [];
 let currentTurn = null;
 let responsePending = false; // true = response.create sudah dikirim, belum response.done
+let turnWatchdog = null; // timer to recover from lost commit/response events
+const TURN_TIMEOUT_MS = 20000; // max wait for a turn to complete before aborting
+
+function clearTurnWatchdog() {
+  if (turnWatchdog) { clearTimeout(turnWatchdog); turnWatchdog = null; }
+}
+
+function armTurnWatchdog() {
+  clearTurnWatchdog();
+  turnWatchdog = setTimeout(() => {
+    notify('Turn timed out — no response from API. Resetting.', 'error');
+    abortActiveTurn();
+  }, TURN_TIMEOUT_MS);
+}
+
+// Centralized recovery: clears in-flight turn state and returns app to IDLE.
+function abortActiveTurn() {
+  clearTurnWatchdog();
+  // Best-effort: cancel any active response + clear server buffer
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      if (responsePending) ws.send(JSON.stringify({ type: 'response.cancel' }));
+      ws.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
+    } catch {}
+  }
+  if (currentTurn) {
+    finalizeTurn('error');
+  } else {
+    responsePending = false;
+    reenableMic();
+    updateState(STATE.IDLE);
+  }
+}
 
 function newTurn() {
   return {
@@ -761,13 +794,20 @@ async function initWebSocket() {
     ws.onopen = () => {
       updateConn(true);
       notify('Connected to OpenAI Realtime', 'success');
-      // Configure session as Indonesian → English interpreter
+      // Configure session as Indonesian → English interpreter.
+      // turn_detection: null disables server-side VAD so this app's
+      // client-side VAD has full manual control over commit/response timing.
       ws.send(JSON.stringify({
         type: 'session.update',
         session: {
           type: 'realtime',
           instructions: 'You are an Indonesian to English interpreter. Listen to Indonesian speech and respond only in English.',
-          input_audio_transcription: { model: 'whisper-1' },
+          audio: {
+            input: {
+              transcription: { model: 'whisper-1' },
+              turn_detection: null,
+            },
+          },
         }
       }));
     };
@@ -778,6 +818,7 @@ async function initWebSocket() {
       notify('WebSocket error', 'error');
       updateState(STATE.ERROR);
       updateConn(false);
+      abortActiveTurn();
     };
 
     ws.onclose = () => {
@@ -785,6 +826,8 @@ async function initWebSocket() {
       if (currentState !== STATE.IDLE && currentState !== STATE.ERROR) {
         notify('WebSocket closed', 'warn');
       }
+      // Recover any in-flight turn so the app never stays stuck
+      if (currentTurn || responsePending) abortActiveTurn();
     };
   } catch (err) {
     notify('Connection failed: ' + err.message, 'error');
@@ -837,6 +880,7 @@ function onWSMessage(event) {
         ws.send(JSON.stringify({ type: 'response.create' }));
         responsePending = true;
         updateState(STATE.WAITING);
+        armTurnWatchdog();
       }
       break;
 
@@ -893,13 +937,14 @@ async function sendAudio() {
   const b64 = base64EncodeAudio(audioBuffer);
   audioBuffer = [];
 
-  // Clear any leftover server-side buffer first, then append + commit.
-  // response.create is sent only after we receive input_audio_buffer.committed
-  // to guarantee the buffer was accepted before creating a response.
+  // Defensive clear guarantees a clean server buffer even if a prior turn
+  // failed mid-flight. Then append + commit. response.create is sent only
+  // after we receive input_audio_buffer.committed (handler above).
   ws.send(JSON.stringify({ type: 'input_audio_buffer.clear' }));
   ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: b64 }));
   ws.send(JSON.stringify({ type: 'input_audio_buffer.commit' }));
-  // t_send_complete and response.create happen in the committed handler below
+  // Watchdog recovers the turn if committed/response events never arrive.
+  armTurnWatchdog();
 }
 
 // ─── PLAYBACK ──────────────────────────────────────────────────────────────
@@ -945,6 +990,7 @@ async function playTranslatedAudio() {
 }
 
 function finalizeTurn(result) {
+  clearTurnWatchdog();
   if (currentTurn) {
     currentTurn.timestamps.t_mic_reenabled = performance.now();
     if (result === 'error') currentTurn.status = 'error';
