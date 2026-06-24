@@ -1090,10 +1090,17 @@ document.getElementById('amp-slider').addEventListener('input', e => {
 });
 
 document.getElementById('btn-start').addEventListener('click', async () => {
-  document.getElementById('btn-start').disabled = true;
-  await startAudio();
-  await initWebSocket();
-  notify('Ready — speak in Indonesian!', 'success');
+  const btn = document.getElementById('btn-start');
+  btn.disabled = true;
+  try {
+    await startAudio();
+    await initWebSocket();
+    notify('Ready — speak in Indonesian!', 'success');
+  } catch (err) {
+    notify('Setup failed: ' + err.message, 'error');
+    updateState(STATE.ERROR);
+    btn.disabled = false;
+  }
 });
 
 document.getElementById('btn-reset').addEventListener('click', () => {
@@ -1101,6 +1108,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   if (ws) { ws.close(); ws = null; }
   currentTurn = null;
   audioBuffer = [];
+  responsePending = false;
   clearTimeout(silenceTimer);
   silenceTimer = null;
   micEnabled = true;
