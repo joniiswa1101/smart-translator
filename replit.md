@@ -1,54 +1,83 @@
-# Voca Interpreter Latency Test
+# Smart Translator Training
 
-A single-page PWA test rig for measuring consecutive interpreter mode latency on OpenAI's gpt-realtime-translate API. User speaks Indonesian → system translates to English in real-time. Measures the dead-air gap between speech end and translated audio playback with millisecond precision.
+Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta. Dua solusi: **A** (multi-input + single-output broadcast) dan **B** (multi-input + multi-output individual). Dibangun di atas proyek "Voca Interpreter Latency Test" asli.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080, serves app at `/`)
+- `pnpm --filter @workspace/api-server run dev` — run the API server (serves app at `/`)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- Required env: `OPENAI_API_KEY` — used server-side only to mint ephemeral client secrets
+- Required env: `OPENAI_API_KEY` — used server-side only (ephemeral secrets, whisper-1, gpt-4o-mini, tts-1)
 
 ## Stack
 
 - pnpm workspaces, Node.js 24, TypeScript 5.9
 - API: Express 5
-- Frontend: Single HTML file with embedded CSS + vanilla JS (no framework)
+- Frontend: Single HTML files (vanilla JS + CSS, no framework)
 - Build: esbuild (CJS bundle)
-- WebSocket: Direct browser → OpenAI wss://api.openai.com/v1/realtime/translations
+- WebSocket: Server-managed (in-memory) + OpenAI APIs
 
 ## Where things live
 
+### Solusi A (Broadcast / Single Output)
+- `artifacts/api-server/src/room.ts` — Room model (single output)
+- `artifacts/api-server/src/room-ws.ts` — WebSocket handler (proxies to OpenAI gpt-realtime)
+- `artifacts/api-server/src/routes/room.ts` — REST API /api/room
+- `artifacts/api-server/public/index.html` — UI klien Solusi A (join room, broadcast, metrics)
+
+### Solusi B (Multi-output / Individual)
+- `artifacts/api-server/src/room2.ts` — Room2 model (multi-output, spokenLang + hearLang)
+- `artifacts/api-server/src/room2-ws.ts` — WebSocket handler (pivot-teks: ASR → Translate → TTS → fan-out)
+- `artifacts/api-server/src/routes/room2.ts` — REST API /api/room2
+- `artifacts/api-server/public/room2.html` — UI klien Solusi B (individual routing, metrics)
+- `artifacts/api-server/src/glossary.ts` — Glosarium domain (300+ istilah training)
+
+### Shared
 - `artifacts/api-server/src/app.ts` — Express app, static file serving
 - `artifacts/api-server/src/routes/session.ts` — POST /api/session (mints ephemeral OpenAI client secret)
-- `artifacts/api-server/public/index.html` — entire frontend (UI + state machine + audio capture + WebSocket)
+- `artifacts/api-server/src/lib/logger.ts` — Pino logger
 
 ## Architecture decisions
 
-- **Ephemeral secret pattern**: Server mints a short-lived OpenAI client secret via the Realtime API and returns it to the browser. Browser uses that secret directly over WebSocket. API key never leaves the server.
-- **Single HTML file**: No build step for frontend — simpler for a measurement tool. All logic in vanilla JS.
-- **24kHz PCM16 audio**: Matches gpt-realtime-translate spec. ScriptProcessor captures Float32, converts to PCM16 before sending.
-- **VAD is client-side**: Voice Activity Detection uses RMS amplitude threshold + configurable silence timer. No server-side VAD.
-- **Static file path detection**: Dev script runs from `artifacts/api-server/`, prod runs from workspace root — `existsSync` picks the right `public/` path automatically.
+- **Ephemeral secret pattern (A)**: Server mints short-lived OpenAI client secret for gpt-realtime. API key never leaves the server.
+- **Pivot-teks (B)**: Audio → whisper-1 ASR → gpt-4o-mini translate → tts-1 TTS → chunked fan-out. Lebih fleksibel, lebih murah, ~60% lower cost.
+- **Individual routing (B)**: Tiap peserta dengar hanya bahasa yang diinginkan (hearLang). Skip jika sama dengan sumber.
+- **Speaker lock**: Selama ada peserta aktif bicara, yang lain tidak bisa mencuri giliran.
+- **VAD is client-side**: RMS amplitude + silence timer. Threshold 0.02, 1.5s silence.
+- **24kHz PCM16**: Matches OpenAI spec for both realtime and tts-1.
+- **Static file path detection**: `existsSync` picks the right `public/` path automatically.
 
-## Product
+## Solusi A: Single Output (Broadcast)
+- **Pipeline**: Client → Server → OpenAI gpt-realtime → Fan-out ke semua
+- **Routing**: ID → EN, EN → ID, BN → ID (tapi BN tidak didukung oleh gpt-realtime)
+- **Latency**: ~800-1200ms (realtime streaming)
+- **Limitasi**: Hanya 2 bahasa, semua dengar sama
 
-- State machine: IDLE → LISTENING → SILENCE_DETECTED → SENDING → WAITING → STREAMING → COMPLETE → PLAYING → IDLE
-- Key metrics: `model_first_byte_latency` (API responsiveness) and `total_turn_gap` (user-perceived dead-air)
-- Session statistics: avg, p95 for both key metrics
-- Turn log table with all timestamps and transcripts (source ID + result EN)
-- Export to JSON for offline analysis
+## Solusi B: Multi-output (Individual)
+- **Pipeline**: Client → Server → whisper-1 ASR → gpt-4o-mini translate → tts-1 TTS → Fan-out individual
+- **Routing**: Tiap peserta terima audio/text dalam hearLang-nya masing-masing
+- **Latency**: ~1500-4000ms (tergantung panjang ucapan)
+- **Keunggulan**: 3 bahasa, individual, lebih murah, lebih fleksibel
+- **Rekomendasi**: Solusi B untuk produksi
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Project title: "Smart Translator Training"
+- Target: 1 Trainer + 3 Peserta (ID, EN, BN)
+- Dual solution: A (broadcast, legacy) dan B (individual, rekomendasi)
+- Focus: Latency + accuracy measurement + multi-language support
 
 ## Gotchas
 
-- Always run from workspace root with `pnpm --filter` — the dev script changes cwd to the artifact dir
-- The WebSocket uses the `openai-insecure-api-key.<secret>` subprotocol — this is the official ephemeral secret pattern, not a real API key exposure
-- `model='gpt-4o-realtime-preview-2025-06-03'` is the current model name for the realtime translate endpoint
+- Always run from workspace root with `pnpm --filter`
+- `/room2.html` untuk Solusi B, `/` untuk Solusi A
+- `/room2-ws` WebSocket untuk Solusi B, `/ws` (proxy) untuk Solusi A
+- Solusi B pakai `tts-1` (bukan gpt-4o-mini-tts) karena tidak support streaming
+- Voice mapping: id=allo, en=echo, bn=alloy
+- For Bengali: whisper-1 mendukung bn, tts-1 mendukung bn. Validasi akurasi butuh audio nyata.
 
 ## Pointers
 
+- `docs/B6.5-comparison.md` — Perbandingan detail A vs B
+- `checklist-translator.md` — Checklist implementasi lengkap (A1-A5, B1-B6)
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
