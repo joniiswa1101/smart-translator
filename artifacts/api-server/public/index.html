@@ -761,7 +761,15 @@ async function initWebSocket() {
     ws.onopen = () => {
       updateConn(true);
       notify('Connected to OpenAI Realtime', 'success');
-      // No session.update needed for v1 realtime API; session is auto-configured
+      // Configure session as Indonesian → English interpreter
+      ws.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          type: 'realtime',
+          instructions: 'You are an Indonesian to English interpreter. Listen to Indonesian speech and respond only in English.',
+          input_audio_transcription: { model: 'whisper-1' },
+        }
+      }));
     };
 
     ws.onmessage = onWSMessage;
@@ -836,7 +844,11 @@ function onWSMessage(event) {
     case 'error':
       notify('API error: ' + (msg.error?.message || JSON.stringify(msg.error)), 'error');
       updateState(STATE.ERROR);
-      reenableMic();
+      if (currentTurn) {
+        finalizeTurn('error');
+      } else {
+        reenableMic();
+      }
       break;
 
     default:
@@ -925,14 +937,15 @@ async function playTranslatedAudio() {
 }
 
 function finalizeTurn(result) {
-  if (!currentTurn) return;
-  currentTurn.timestamps.t_mic_reenabled = performance.now();
-  if (result === 'error') currentTurn.status = 'error';
-  else calcMetrics(currentTurn);
-  turns.push(currentTurn);
-  addTurnToLog(currentTurn);
-  updateStatsSummary();
-  currentTurn = null;
+  if (currentTurn) {
+    currentTurn.timestamps.t_mic_reenabled = performance.now();
+    if (result === 'error') currentTurn.status = 'error';
+    else calcMetrics(currentTurn);
+    turns.push(currentTurn);
+    addTurnToLog(currentTurn);
+    updateStatsSummary();
+    currentTurn = null;
+  }
   responsePending = false;
   reenableMic();
   updateState(STATE.IDLE);
