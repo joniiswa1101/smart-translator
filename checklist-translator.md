@@ -8,35 +8,35 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta.
 > Tiap orang punya mic (input), semua dengar dari 1 speaker (output). Pipeline speech-to-speech.
 
 ### A1 — Fondasi Server Ruang
-- [ ] **A1.1** Definisi model data: Room (kode ruang), Participant (nama, deviceId, micId, inputLang, active)
-- [ ] **A1.2** Server WebSocket (in-memory) per ruang, bisa 1 Trainer + 3 Peserta
-- [ ] **A1.3** API join-room: POST /api/room/{code}/join dengan kode unik (4 digit misal TR42)
-- [ ] **A1.4** Daftar peserta aktif di ruang, siapa sedang bicara (speaker lock)
-- [ ] **A1.5** Broadcast peserta ke semua (tampilan siapa di ruang)
+- [x] **A1.1** Definisi model data: Room (kode ruang), Participant (nama, deviceId, micId, inputLang, active)
+- [x] **A1.2** Server WebSocket (in-memory) per ruang, bisa 1 Trainer + 3 Peserta
+- [x] **A1.3** API join-room: POST /api/room/{code}/join dengan kode unik (4 digit misal TR42)
+- [x] **A1.4** Daftar peserta aktif di ruang, siapa sedang bicara (speaker lock)
+- [x] **A1.5** Broadcast peserta ke semua (tampilan siapa di ruang)
 
 ### A2 — Multi-input Audio
-- [ ] **A2.1** Klien WebRTC/getUserMedia per peserta (input mic)
-- [ ] **A2.2** VAD di tiap klien (pakai ulang VAD sekarang) — deteksi siapa bicara
-- [ ] **A2.3** Kirim audio fragment (PCM 16, 24kHz) dari klien → server WebSocket
-- [ ] **A2.4** Server buffer audio per peserta, identifikasi "giliran" siapa
-- [ ] **A2.5** Speaker lock: selama ada peserta aktif bicara, yang lain tidak bisa "mencuri" giliran
-- [ ] **A2.6** Ucapan < 200ms dibuang (anti-bising)
-- [ ] **A2.7** Ucapan > 30 detik dipaksa potong (MAX_TURN_SEC)
+- [x] **A2.1** Klien WebRTC/getUserMedia per peserta (input mic)
+- [x] **A2.2** VAD di tiap klien (pakai ulang VAD sekarang) — deteksi siapa bicara
+- [x] **A2.3** Kirim audio fragment (PCM 16, 24kHz) dari klien → server WebSocket
+- [x] **A2.4** Server buffer audio per peserta, identifikasi "giliran" siapa
+- [x] **A2.5** Speaker lock: selama ada peserta aktif bicara, yang lain tidak bisa "mencuri" giliran
+- [x] **A2.6** Ucapan < 200ms dibuang (anti-bising)
+- [x] **A2.7** Ucapan > 30 detik dipaksa potong (MAX_TURN_SEC)
 
 ### A3 — Routing & Terjemahan
-- [ ] **A3.1** Routing otomatis 3-arah: ID → EN, EN → ID, BN → ID
-- [ ] **A3.2** Koneksi WebSocket ke OpenAI Realtime (gpt-realtime-translate) per ruang
-- [ ] **A3.3** Server proxy audio ke OpenAI (pakai ulang kode /ws sekarang)
-- [ ] **A3.4** Terima terjemahan dari OpenAI (text + audio)
-- [ ] **A3.5** Fan-out audio ke SEMUA klien di ruang (single output)
+- [x] **A3.1** Routing otomatis 3-arah: ID → EN, EN → ID, BN → ID
+- [x] **A3.2** Koneksi WebSocket ke OpenAI Realtime (gpt-realtime-translate) per ruang
+- [x] **A3.3** Server proxy audio ke OpenAI (pakai ulang kode /ws sekarang)
+- [x] **A3.4** Terima terjemahan dari OpenAI (text + audio)
+- [x] **A3.5** Fan-out audio ke SEMUA klien di ruang (single output)
 
 ### A4 — UI Klien (per peserta)
-- [ ] **A4.1** Halaman "Join Room": masukkan kode ruang, nama, pilih bahasa bicara
-- [ ] **A4.2** Tombol Mute/Unmute mic (kontrol peserta)
-- [ ] **A4.3** Status: "Listening…" / "Silence…" / "Terjemahan diputar…"
-- [ ] **A4.4** Log transkrip sumber + terjemahan (tabel)
-- [ ] **A4.5** Panel peserta aktif (siapa sedang bicara, siapa ada di ruang)
-- [ ] **A4.6** Audio output dari 1 speaker (browser) atau earphone (pilihan)
+- [x] **A4.1** Halaman "Join Room": masukkan kode ruang, nama, pilih bahasa bicara
+- [x] **A4.2** Tombol Mute/Unmute mic (kontrol peserta)
+- [x] **A4.3** Status: "Listening…" / "Silence…" / "Terjemahan diputar…"
+- [x] **A4.4** Log transkrip sumber + terjemahan (tabel)
+- [x] **A4.5** Panel peserta aktif (siapa sedang bicara, siapa ada di ruang)
+- [x] **A4.6** Audio output dari 1 speaker (browser) atau earphone (pilihan)
 
 ### A5 — Ukur & Verifikasi
 - [ ] **A5.1** Metrik latency: model_first_byte, total_turn_gap, session stats
