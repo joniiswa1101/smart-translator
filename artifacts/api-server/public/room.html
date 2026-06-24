@@ -740,11 +740,13 @@
         isPlayingAudio = false;
         return;
       }
+      // Decode base64 → binary string → Uint8Array → Int16Array (little-endian)
       const binary = atob(combined);
-      const pcm16 = new Int16Array(binary.length);
+      const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) {
-        pcm16[i] = binary.charCodeAt(i);
+        bytes[i] = binary.charCodeAt(i);
       }
+      const pcm16 = new Int16Array(bytes.buffer);
       const float32 = new Float32Array(pcm16.length);
       for (let i = 0; i < pcm16.length; i++) {
         float32[i] = pcm16[i] / 32768;
