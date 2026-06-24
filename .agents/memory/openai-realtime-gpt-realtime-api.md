@@ -68,6 +68,23 @@ speech with OpenAI TTS and feed it through the same realtime flow:
 - Drive the full manual flow (append→commit→wait committed→response.create) and read
   `conversation.item.input_audio_transcription.completed` (source) + `response.output_audio_transcript.done` (result).
 
+## Client-side VAD tuning (RMS hangover) — premature cutoff of long speech
+A fixed RMS amplitude threshold + a single silence timer cuts off long continuous speech at
+natural intra-sentence pauses (breaths, sentence boundaries, soft consonants). Fix shape:
+- Smooth RMS with an **asymmetric EMA** (fast attack ~0.6, slow release) and make VAD decisions on
+  the smoothed value, not the instantaneous per-frame RMS. The slow release is the "hangover" that
+  bridges quiet gaps inside speech.
+- **Critical: size the release to the frame interval.** ScriptProcessor(4096) @24kHz = ~170ms/frame.
+  Release weight `a` per frame → decay time const ≈ frameInterval/a. release=0.04 gives ~4s decay
+  (feels stuck, can never end if noise floor stays above threshold); release≈0.2 gives ~0.8–1.2s,
+  which is sane on top of the ~1.5s silence timer.
+- Only arm the end-of-turn silence timer after `voicedFrames>0` (don't fire on the leading transient).
+- Discard turns with <~200ms buffered audio (avoids the API's under-length commit rejection).
+- Add a hard **MAX_TURN_SEC** force-commit so a noisy floor that keeps the signal "voiced" can't trap
+  the turn in LISTENING forever. Track a running `bufferedSamples` counter instead of re-summing chunks.
+- **This tool is half-duplex by design**: mic is muted for the whole translate+playback cycle, so speech
+  during that window is dropped. Not suitable for non-stop monologue without a chunking/streaming redesign.
+
 ## Late input transcription vs response.done
 `input_audio_transcription.completed` can arrive AFTER `response.done` (and after the turn is
 finalized/logged), leaving the Source cell blank. Fix: keep a `lastLoggedTurn` ref with its DOM row;

@@ -395,8 +395,8 @@
         </div>
 
         <div class="config-row">
-          <label>Amplitude Threshold <span id="amp-val">0.05</span></label>
-          <input type="range" id="amp-slider" min="1" max="20" step="1" value="5" />
+          <label>Amplitude Threshold <span id="amp-val">0.02</span></label>
+          <input type="range" id="amp-slider" min="1" max="20" step="1" value="2" />
         </div>
 
         <div class="config-row">
@@ -492,7 +492,7 @@
 // ─── CONFIG ────────────────────────────────────────────────────────────────
 const config = {
   silenceThreshold: 1500,
-  amplitudeThreshold: 0.05,
+  amplitudeThreshold: 0.02,
   targetLanguage: 'en',
   sampleRate: 24000,
 };
@@ -629,6 +629,15 @@ let audioBuffer = []; // Float32 chunks while listening
 let silenceTimer = null;
 let isRecording = false;
 let micEnabled = true;
+// VAD smoothing state. Fast attack detects speech onset quickly; slow release
+// keeps us "in speech" through brief dips between words, syllables and breaths
+// (a hangover) so natural intra-sentence pauses are not mistaken for end-of-turn.
+let smoothedRms = 0;   // exponential moving average of RMS, used for VAD decisions
+let voicedFrames = 0;  // frames detected as speech in the current turn
+let bufferedSamples = 0; // running sample count for the current turn (avoids re-summing)
+const VAD_ATTACK = 0.6;   // EMA weight on rising energy — quick to react
+const VAD_RELEASE = 0.2;  // EMA weight on falling energy — ~0.8–1.2s hangover, bridges word gaps without stalling
+const MAX_TURN_SEC = 30;  // hard cap: force-commit a turn this long so a noisy floor can't trap us in LISTENING
 
 async function startAudio() {
   try {
@@ -663,22 +672,35 @@ function onAudioProcess(e) {
   if (!micEnabled) return;
   const data = e.inputBuffer.getChannelData(0);
   const rms = calcRMS(data);
-  updateMeter(rms);
+  // Asymmetric exponential smoothing (attack/release). On a rise we weight the new
+  // louder value heavily (fast onset); on a fall we weight it lightly so the value
+  // decays slowly — this hangover bridges the quiet gaps inside continuous speech.
+  const a = rms > smoothedRms ? VAD_ATTACK : VAD_RELEASE;
+  smoothedRms = a * rms + (1 - a) * smoothedRms;
+  updateMeter(smoothedRms);
+
+  const voiced = smoothedRms > config.amplitudeThreshold;
 
   if (currentState === STATE.IDLE) {
-    if (rms > config.amplitudeThreshold) {
-      startNewTurn();
-    }
+    if (voiced) startNewTurn();
   } else if (currentState === STATE.LISTENING) {
     // buffer audio
     audioBuffer.push(new Float32Array(data));
-    if (rms > config.amplitudeThreshold) {
+    bufferedSamples += data.length;
+    // Safety cap: if a noisy floor keeps the signal "voiced" so the silence timer
+    // never arms, force-commit at the max turn length instead of capturing forever.
+    if (bufferedSamples >= config.sampleRate * MAX_TURN_SEC) {
+      handleSilenceDetected();
+      return;
+    }
+    if (voiced) {
+      voicedFrames++;
       clearTimeout(silenceTimer);
       silenceTimer = null;
-    } else {
-      if (!silenceTimer) {
-        silenceTimer = setTimeout(handleSilenceDetected, config.silenceThreshold);
-      }
+    } else if (!silenceTimer && voicedFrames > 0) {
+      // Only arm the end-of-turn timer after we've actually heard speech, so the
+      // leading edge of a turn can't immediately fire on a transient.
+      silenceTimer = setTimeout(handleSilenceDetected, config.silenceThreshold);
     }
   }
 }
@@ -693,6 +715,8 @@ function startNewTurn() {
   clearTimeout(silenceTimer);
   silenceTimer = null;
   audioBuffer = [];
+  voicedFrames = 0;
+  bufferedSamples = 0;
   currentTurn = newTurn();
   currentTurn.timestamps.t_speech_start = performance.now();
   updateState(STATE.LISTENING);
@@ -700,11 +724,22 @@ function startNewTurn() {
 
 function handleSilenceDetected() {
   if (currentState !== STATE.LISTENING) return;
+  clearTimeout(silenceTimer);
+  silenceTimer = null;
+  // Discard ultra-short blips (noise transients): if we captured less than ~200ms
+  // of audio, abort the turn instead of sending an under-length buffer (which the
+  // API rejects). Return to IDLE and keep waiting for real speech.
+  if (bufferedSamples < config.sampleRate * 0.2) {
+    audioBuffer = [];
+    voicedFrames = 0;
+    bufferedSamples = 0;
+    currentTurn = null;
+    updateState(STATE.IDLE);
+    return;
+  }
   updateState(STATE.SILENCE_DETECTED);
   currentTurn.timestamps.t_speech_end = performance.now();
   micEnabled = false; // mute mic
-  clearTimeout(silenceTimer);
-  silenceTimer = null;
   sendAudio();
 }
 
@@ -1224,6 +1259,9 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   currentTurn = null;
   lastLoggedTurn = null;
   audioBuffer = [];
+  smoothedRms = 0;
+  voicedFrames = 0;
+  bufferedSamples = 0;
   responsePending = false;
   activeResponseId = null;
   clearTimeout(silenceTimer);
