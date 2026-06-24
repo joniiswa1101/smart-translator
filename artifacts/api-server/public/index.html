@@ -801,22 +801,9 @@ async function initWebSocket() {
       updateConn(true);
       sessionReady = false; // wait for session.updated before sending audio
       notify('Connected to OpenAI Realtime', 'success');
-      // Configure session as Indonesian → English interpreter.
-      // turn_detection: null disables server-side VAD so this app's
-      // client-side VAD has full manual control over commit/response timing.
-      ws.send(JSON.stringify({
-        type: 'session.update',
-        session: {
-          type: 'realtime',
-          instructions: 'You are an Indonesian to English interpreter. Listen to Indonesian speech and respond only in English.',
-          audio: {
-            input: {
-              transcription: { model: 'whisper-1' },
-              turn_detection: null,
-            },
-          },
-        }
-      }));
+      // session.update is sent only after the server sends session.created
+      // (handler in onWSMessage below). Sending it too early can cause the
+      // server to ignore the config or never ack it.
     };
 
     ws.onmessage = onWSMessage;
@@ -891,6 +878,26 @@ function onWSMessage(event) {
         updateState(STATE.WAITING);
         armTurnWatchdog();
       }
+      break;
+
+    // Session is created by the server; now configure our session (turn_detection:null,
+    // transcription, instructions). On the real OpenAI wss this fires immediately after
+    // the open event; on the proxy path it still fires and we must send here, not in
+    // ws.onopen, so the server has already created the session.
+    case 'session.created':
+      ws.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          type: 'realtime',
+          instructions: 'You are an Indonesian to English interpreter. Listen to Indonesian speech and respond only in English.',
+          audio: {
+            input: {
+              transcription: { model: 'whisper-1' },
+              turn_detection: null,
+            },
+          },
+        }
+      }));
       break;
 
     // Session config (turn_detection:null etc.) acknowledged — only now is it
