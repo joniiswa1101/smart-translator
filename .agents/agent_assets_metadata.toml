@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "PbQ0yO40m2KT5JUWyoVW2"
+uri = "file://checklist-translator.md"
+type = "text"
+title = "Checklist Implementasi: Smart Translator Training"
