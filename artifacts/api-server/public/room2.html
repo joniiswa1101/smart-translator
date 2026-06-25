@@ -620,7 +620,9 @@
     }
     async function startMic() {
       try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: SAMPLE_RATE, channelCount: 1 } });
+        // sampleRate NOT in getUserMedia — Android Chrome throws OverconstrainedError for exact sampleRate.
+        // AudioContext({ sampleRate }) handles resampling internally.
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
         audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
         const source = audioCtx.createMediaStreamSource(micStream);
         scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
@@ -646,7 +648,11 @@
           ws.send(JSON.stringify({ type: 'turn.request' }));
         }
       } catch (err) {
-        notify('Mic gagal: ' + err.message, 'error');
+        const msg = 'Mic gagal: ' + (err.message || err.name || String(err));
+        notify(msg, 'error');
+        alert(msg); // visible fallback for mobile
+        micStarting = false;
+        pendingStop = false;
       }
     }
     function stopMic() {
