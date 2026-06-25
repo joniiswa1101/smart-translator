@@ -356,6 +356,17 @@
     let audioQueue = [];
     let isPlayingAudio = false;
     let SAMPLE_RATE = 24000;
+    // Single playback AudioContext, unlocked on a user gesture (join/mic tap).
+    // Mobile browsers (Chrome Android) start an AudioContext "suspended" unless it
+    // was created/resumed inside a user gesture — a per-chunk context created when a
+    // WS message arrives plays SILENTLY. Reuse one and resume() it on every gesture.
+    let playbackCtx = null;
+    function unlockPlayback() {
+      try {
+        if (!playbackCtx) playbackCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+        if (playbackCtx.state === 'suspended') playbackCtx.resume();
+      } catch (e) { /* ignore */ }
+    }
 
     let smoothedRMS = 0;
     let voicedFrames = 0;
@@ -452,6 +463,9 @@
         notify('Masukkan kode ruang dan nama', 'error');
         return;
       }
+      // Unlock audio playback now — this runs inside the join button gesture,
+      // so the playback context starts in a "running" state on mobile.
+      unlockPlayback();
       roomCode = code;
       myRole = role;
       mySpokenLang = spokenLang;
@@ -629,6 +643,8 @@
       const now = Date.now();
       if (now - lastMicDownTime < 300) return;
       lastMicDownTime = now;
+      // Re-assert playback unlock on every mic tap (another user gesture).
+      unlockPlayback();
       if (micState === 'starting') {
         // Mic still acquiring — record intent to stop once it's ready
         pendingStop = true;
@@ -810,7 +826,11 @@
     async function playAudioQueue() {
       if (isPlayingAudio || audioQueue.length === 0) return;
       isPlayingAudio = true;
-      const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      // Reuse the single gesture-unlocked context; create one as a fallback.
+      if (!playbackCtx) playbackCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      const ctx = playbackCtx;
+      // Resume in case the browser suspended it (autoplay policy / backgrounding).
+      if (ctx.state === 'suspended') { try { await ctx.resume(); } catch (e) {} }
       const audioChunks = [];
       while (audioQueue.length > 0) audioChunks.push(audioQueue.shift());
       const combined = audioChunks.join('');

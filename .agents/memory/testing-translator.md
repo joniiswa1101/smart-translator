@@ -50,3 +50,12 @@ description: How to validate Solusi B (room2) ASR→translate→TTS routing and 
 - **How to apply:** Only pass `form.append("language", x)` for hint-supported codes
   (WHISPER_HINT_LANGS = {id, en}); omit for bn so auto-detect runs. Bengali as OUTPUT
   (translate→bn, tts-1→bn) is fully supported; Bengali as INPUT (ASR) remains unreliable.
+
+## Mobile audio playback: AudioContext must be unlocked on a user gesture
+- **Why:** On Chrome Android an AudioContext created/resumed OUTSIDE a user gesture starts
+  "suspended"; source.start() then plays SILENTLY (no error). Symptom: translation text
+  logs correctly but peserta hears nothing. Creating a fresh AudioContext per audio chunk
+  (on WS message arrival) guarantees this — the message handler is not a gesture.
+- **How to apply:** Use ONE shared playback AudioContext; create + resume() it inside user
+  gestures (join button, mic tap); resume() again before each playback. Never new-up a
+  context per chunk. Mic-capture context worked only because it was made on the mic tap.
