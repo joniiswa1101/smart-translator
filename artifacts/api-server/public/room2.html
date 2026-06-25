@@ -278,7 +278,7 @@
           <span id="my-info">-</span>
         </div>
         <div id="mic-instructions" style="margin-top:4px; font-size:0.75rem; color:var(--yellow);">
-          Tekan dan tahan tombol mic saat bicara. Lepas untuk kirim.
+          Tap tombol mic untuk mulai merekam. Tap lagi untuk kirim.
         </div>
       </div>
 
@@ -438,6 +438,8 @@
     }
     // Show trainer mode checkbox on initial load (default role is trainer)
     toggleTrainerModeUI();
+    // Sync hearLang = spokenLang on initial load too
+    syncHearLang();
 
     async function joinRoom() {
       const code = document.getElementById('join-code').value.trim().toUpperCase();
@@ -508,11 +510,14 @@
         updateParticipants();
         showScreen('screen-room');
         setupMicButton();
-        notify(`Bergabung sebagai ${myName}`, 'success');
-        // Trainer mode: show hint that mic must be toggled on
+        // Update mic instructions based on role
+        const instr = document.getElementById('mic-instructions');
         if (myRole === 'trainer' && myTrainerMode) {
-          notify('Trainer mode: aktifkan mic sekali, bicara otomatis', 'info');
+          instr.textContent = 'Trainer Auto-VAD: tap tombol mic sekali, VAD otomatis mendeteksi bicara.';
+        } else {
+          instr.textContent = 'Tap tombol mic untuk mulai merekam. Tap lagi untuk kirim.';
         }
+        notify(`Bergabung sebagai ${myName}`, 'success');
       }
       if (type === 'room.participant.joined') {
         participants.push(msg.participant);
@@ -610,44 +615,22 @@
       b.addEventListener('touchcancel',(e) => { e.preventDefault(); handleMicUp(); }, { passive: false });
     }
 
+    // ALL roles use toggle: tap once = ON, tap again = OFF+send
+    // Push-to-hold was unreliable: touchend fires before getUserMedia resolves → immediate stop
     let lastMicDownTime = 0;
     async function handleMicDown(target, pointerId) {
-      // Debounce: pointer + touch can both fire — ignore if within 50ms
+      // Debounce 300ms: pointer + touch can both fire on same tap
       const now = Date.now();
-      if (now - lastMicDownTime < 50) return;
+      if (now - lastMicDownTime < 300) return;
       lastMicDownTime = now;
-
-      try { if (pointerId != null) target.setPointerCapture(pointerId); } catch(_) {}
-
-      // Trainer + trainer mode = toggle
-      if (myTrainerMode && myRole === 'trainer') {
-        if (!micOn) await startMic();
-        else stopMic();
-        return;
-      }
-      // Peserta = push-to-hold
-      if (!micOn && !micStarting) {
-        pendingStop = false;
-        micStarting = true;
-        await startMic();
-        micStarting = false;
-        if (pendingStop) { stopMic(); pendingStop = false; }
-      }
+      if (!micOn) await startMic();
+      else stopMic();
     }
 
-    let lastMicUpTime = 0;
-    function handleMicUp() {
-      const now = Date.now();
-      if (now - lastMicUpTime < 50) return;
-      lastMicUpTime = now;
-      if (myTrainerMode && myRole === 'trainer') return;
-      if (micOn) stopMic();
-      else if (micStarting) pendingStop = true;
-    }
+    function handleMicUp() { /* toggle mode: no action on release */ }
 
-    // Keep these for backward compat (trainer toggle via keyboard etc.)
     async function micBtnDown(e) { e.preventDefault(); await handleMicDown(e.target, e.pointerId); }
-    function micBtnUp(e) { e.preventDefault(); handleMicUp(); }
+    function micBtnUp(e) { e.preventDefault(); }
     async function startMic() {
       try {
         // sampleRate NOT in getUserMedia — Android Chrome throws OverconstrainedError for exact sampleRate.
