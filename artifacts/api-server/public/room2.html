@@ -538,6 +538,7 @@
       if (type === 'turn.completed') {
         currentSpeakerId = null;
         updateStatus(STATE.IDLE);
+        turns.push(msg);
         addTurnToLog(msg);
         translationCount += msg.translations?.length || 0;
         updateStats();
