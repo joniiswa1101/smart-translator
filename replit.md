@@ -74,7 +74,8 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta. D
 - `/room2-ws` WebSocket untuk Solusi B, `/ws` (proxy) untuk Solusi A
 - Solusi B pakai `tts-1` (bukan gpt-4o-mini-tts) karena tidak support streaming
 - Voice mapping: id=allo, en=echo, bn=alloy
-- For Bengali: whisper-1 mendukung bn, tts-1 mendukung bn. Validasi akurasi butuh audio nyata.
+- Bengali sebagai OUTPUT (Dengar/hearLang BN) didukung penuh: gpt-4o-mini translate→bn + tts-1→bn. Validasi akurasi butuh audio nyata.
+- Bengali sebagai INPUT (Bicara/spokenLang BN) TIDAK didukung resmi oleh whisper-1: param `language=bn` ditolak 400 (unsupported_language). Solusi: jangan kirim language hint untuk bn (auto-detect). Hint hanya untuk id/en (lihat WHISPER_HINT_LANGS di room2-ws.ts). Akurasi ASR Bengali tetap tidak terjamin.
 
 ## Pointers
 

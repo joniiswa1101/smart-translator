@@ -368,13 +368,22 @@ function cancelTurn2(room: Room2, participant: Participant2) {
 }
 
 // ========== ASR ==========
+// Languages OpenAI Whisper accepts as a `language` hint. Bengali ("bn") is NOT
+// supported as a hint (API returns 400 unsupported_language), even though the
+// model can still auto-detect it. So we omit the hint for unsupported langs.
+const WHISPER_HINT_LANGS = new Set(["id", "en"]);
+
 async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<string> {
   const wav = pcm16ToWav(pcmBuffer, 24000);
   const form = new FormData();
   const blob = new Blob([new Uint8Array(wav)], { type: "audio/wav" });
   form.append("file", blob, "audio.wav");
   form.append("model", "whisper-1");
-  form.append("language", spokenLang); // Force language → prevent Whisper misdetection
+  // Only send the hint for supported langs (prevents misdetection for id/en).
+  // For bn, omit it and let Whisper auto-detect (passing "bn" 400s).
+  if (WHISPER_HINT_LANGS.has(spokenLang)) {
+    form.append("language", spokenLang);
+  }
 
   const resp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",

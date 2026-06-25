@@ -41,3 +41,12 @@ description: How to validate Solusi B (room2) ASR→translate→TTS routing and 
   requested → status "IDLE forever", audio rejected, no translation. (Real reported bug.)
 - **How to apply:** Only the TRAINER defers to VAD: `deferToVad = myTrainerMode && myRole==='trainer'`.
   Peserta always sends turn.request on mic ON, regardless of room trainer mode.
+
+## Whisper API rejects bn (and other unlisted langs) as a `language` hint
+- **Why:** OpenAI whisper-1 `language` param only accepts its documented ISO-639-1 list;
+  Bengali ("bn") is NOT in it → 400 unsupported_language, crashing the ASR step. The
+  model CAN still auto-detect Bengali when no hint is sent. (replit.md previously claimed
+  whisper-1 "mendukung bn" — that was wrong for the language hint.)
+- **How to apply:** Only pass `form.append("language", x)` for hint-supported codes
+  (WHISPER_HINT_LANGS = {id, en}); omit for bn so auto-detect runs. Bengali as OUTPUT
+  (translate→bn, tts-1→bn) is fully supported; Bengali as INPUT (ASR) remains unreliable.
