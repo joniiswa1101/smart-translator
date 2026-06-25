@@ -264,7 +264,7 @@
         <div class="card-title">Kontrol Saya</div>
         <div style="display:flex; align-items:center; gap:16px;">
           <div class="mic-controls">
-            <button id="btn-mic" class="mic-btn off" onpointerdown="micBtnDown(event)" onpointerup="micBtnUp(event)" style="user-select:none; touch-action:none;">
+            <button id="btn-mic" class="mic-btn off" style="user-select:none; touch-action:none;">
               <svg id="mic-icon-off" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
               <svg id="mic-icon-on" class="hidden" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.65 1.65c-.67.33-1.41.53-2.3.53a5.98 5.98 0 0 1-5.94-5.24H5.01c.03.78.24 1.52.59 2.2L4.5 15.08c-.57-1.04-.88-2.23-.88-3.46h-2c0 1.63.42 3.16 1.15 4.52L1.7 17.78A9.962 9.962 0 0 0 11 21.95V24h2v-2.05a9.98 9.98 0 0 0 5.7-3.23l2.04 2.04L21.73 21 4.27 3z"/></svg>
             </button>
@@ -507,6 +507,7 @@
         myTrainerMode = msg.trainerMode || myTrainerMode;
         updateParticipants();
         showScreen('screen-room');
+        setupMicButton();
         notify(`Bergabung sebagai ${myName}`, 'success');
         // Trainer mode: show hint that mic must be toggled on
         if (myRole === 'trainer' && myTrainerMode) {
@@ -591,17 +592,40 @@
     let micStarting = false;
     let pendingStop = false;
 
-    async function micBtnDown(e) {
-      e.preventDefault();
-      // Capture pointer so pointerup fires even if finger moves off button (Android fix)
-      try { e.target.setPointerCapture(e.pointerId); } catch(_) {}
-      // Trainer + trainer mode = toggle (klik ON, klik lagi OFF)
+    // Called once after join — attaches pointer + touch events to mic button
+    function setupMicButton() {
+      const btn = document.getElementById('btn-mic');
+      // Remove any previous listeners by cloning
+      const fresh = btn.cloneNode(true);
+      btn.parentNode.replaceChild(fresh, btn);
+      const b = document.getElementById('btn-mic');
+
+      // Pointer events (desktop + some Android)
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); handleMicDown(e.target, e.pointerId); }, { passive: false });
+      b.addEventListener('pointerup',   (e) => { e.preventDefault(); handleMicUp(); }, { passive: false });
+
+      // Touch events (primary path for Android Chrome)
+      b.addEventListener('touchstart', (e) => { e.preventDefault(); handleMicDown(b, null); }, { passive: false });
+      b.addEventListener('touchend',   (e) => { e.preventDefault(); handleMicUp(); }, { passive: false });
+      b.addEventListener('touchcancel',(e) => { e.preventDefault(); handleMicUp(); }, { passive: false });
+    }
+
+    let lastMicDownTime = 0;
+    async function handleMicDown(target, pointerId) {
+      // Debounce: pointer + touch can both fire — ignore if within 50ms
+      const now = Date.now();
+      if (now - lastMicDownTime < 50) return;
+      lastMicDownTime = now;
+
+      try { if (pointerId != null) target.setPointerCapture(pointerId); } catch(_) {}
+
+      // Trainer + trainer mode = toggle
       if (myTrainerMode && myRole === 'trainer') {
         if (!micOn) await startMic();
         else stopMic();
         return;
       }
-      // Peserta = push-to-hold; handle async getUserMedia
+      // Peserta = push-to-hold
       if (!micOn && !micStarting) {
         pendingStop = false;
         micStarting = true;
@@ -610,14 +634,20 @@
         if (pendingStop) { stopMic(); pendingStop = false; }
       }
     }
-    function micBtnUp(e) {
-      e.preventDefault();
-      // Trainer: no-op on up
+
+    let lastMicUpTime = 0;
+    function handleMicUp() {
+      const now = Date.now();
+      if (now - lastMicUpTime < 50) return;
+      lastMicUpTime = now;
       if (myTrainerMode && myRole === 'trainer') return;
-      // Peserta: stop if mic ready, else flag for stop after startMic
       if (micOn) stopMic();
       else if (micStarting) pendingStop = true;
     }
+
+    // Keep these for backward compat (trainer toggle via keyboard etc.)
+    async function micBtnDown(e) { e.preventDefault(); await handleMicDown(e.target, e.pointerId); }
+    function micBtnUp(e) { e.preventDefault(); handleMicUp(); }
     async function startMic() {
       try {
         // sampleRate NOT in getUserMedia — Android Chrome throws OverconstrainedError for exact sampleRate.
