@@ -274,8 +274,11 @@
             </div>
           </div>
         </div>
-        <div style="margin-top:8px; font-size:0.8rem; color:var(--muted);">
+        <div id="mic-hint" style="margin-top:8px; font-size:0.8rem; color:var(--muted);">
           <span id="my-info">-</span>
+        </div>
+        <div id="mic-instructions" style="margin-top:4px; font-size:0.75rem; color:var(--yellow);">
+          Tekan dan tahan tombol mic saat bicara. Lepas untuk kirim.
         </div>
       </div>
 
@@ -360,6 +363,7 @@
     let bufferedSamples = 0;
     let isVoiced = false;
     let turnTimer = null;
+    let hasAutoCommitted = false;
     const MAX_TURN_SEC = 30000;
     const VAD_ATTACK = 0.6;
     const VAD_RELEASE = 0.2;
@@ -495,6 +499,7 @@
 
     function handleWsMessage(msg) {
       const type = msg.type;
+      console.log('WS:', type, msg);
       if (type === 'room.joined') {
         participantId = msg.participantId;
         participants = msg.participants || [];
@@ -557,16 +562,9 @@
         }
       }
       if (type === 'turn.rejected') {
-        // Trainer mode: auto-retry after short delay
-        if (myTrainerMode && myRole === 'trainer') {
-          setTimeout(() => {
-            if (myTrainerMode && !autoTurnActive) {
-              startAutoTurn();
-            }
-          }, 500);
-        } else {
-          notify('Sibuk, coba lagi', 'error');
-        }
+        notify('Sibuk, coba lagi', 'error');
+        // Reset auto turn so VAD can try again
+        autoTurnActive = false;
       }
       if (type === 'room.trainerMode') {
         const enabled = msg.enabled;
@@ -635,15 +633,15 @@
       document.getElementById('meter-bar').style.width = '0%';
 
       if (ws && ws.readyState === WebSocket.OPEN) {
-        // If we have buffered audio, commit it (process translation). Otherwise cancel.
-        if (bufferedSamples > 0) {
+        if (bufferedSamples > 0 && !hasAutoCommitted) {
           ws.send(JSON.stringify({ type: 'audio.commit' }));
         } else {
           ws.send(JSON.stringify({ type: 'turn.cancel' }));
         }
       }
-      // Reset auto-turn state
+      // Reset all states
       autoTurnActive = false;
+      hasAutoCommitted = false;
       bufferedSamples = 0;
       voicedFrames = 0;
       silenceFrames = 0;
@@ -689,7 +687,11 @@
       }
       if (!isFrameVoiced && isVoiced && silenceFrames > SILENCE_FRAMES_THRESHOLD) {
         isVoiced = false;
-        if (bufferedSamples > 0) commitAudio();
+        if (bufferedSamples > 0 && !hasAutoCommitted) {
+          hasAutoCommitted = true;
+          commitAudio();
+          console.log('Auto-committed on silence');
+        }
       }
 
       if (isVoiced || bufferedSamples > 0) {

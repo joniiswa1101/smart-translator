@@ -87,7 +87,10 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     }
 
     if (type === "audio.append") {
-      if (!room.isListening || room.currentSpeaker !== participantId) return;
+      if (!room.isListening || room.currentSpeaker !== participantId) {
+        logger.debug({ participantId, isListening: room.isListening, currentSpeaker: room.currentSpeaker }, "audio.append rejected");
+        return;
+      }
       if (msg.audio && typeof msg.audio === "string") {
         room.audioBuffer.push(Buffer.from(msg.audio, "base64"));
       }
@@ -95,12 +98,16 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     }
 
     if (type === "audio.commit") {
-      if (!room.isListening || room.currentSpeaker !== participantId) return;
+      if (!room.isListening || room.currentSpeaker !== participantId) {
+        logger.debug({ participantId, isListening: room.isListening, currentSpeaker: room.currentSpeaker }, "audio.commit rejected");
+        return;
+      }
       commitAudioTurn2(room, participant);
       return;
     }
 
     if (type === "turn.request") {
+      logger.info({ participantId, name: participant.name, role: participant.role, currentSpeaker: room.currentSpeaker, isListening: room.isListening, isProcessing: room.isProcessing }, "Turn request received");
       // Trainer mode: if trainer requests while busy, cancel current turn and grant
       if (participant.role === "trainer" && room.trainerMode && (room.isListening || room.isProcessing || room.isPlaying)) {
         if (room.currentSpeaker && room.currentSpeaker !== participantId) {
@@ -112,6 +119,7 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       }
       if (room.isListening || room.isProcessing || room.isPlaying) {
         ws.send(JSON.stringify({ type: "turn.rejected", reason: "Busy" }));
+        logger.info({ participantId, name: participant.name, reason: "Busy" }, "Turn rejected");
         return;
       }
       room.currentSpeaker = participantId;

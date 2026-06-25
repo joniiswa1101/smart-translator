@@ -49,7 +49,7 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const type = msg.type;
 
     if (type === "room.join") {
-      const { code, name, role, lang } = msg;
+      const { code, name, role, lang, trainerMode } = msg;
       const targetRoom = getRoom(code);
       if (!targetRoom) {
         ws.send(JSON.stringify({ type: "room.error", error: "Room not found" }));
@@ -59,6 +59,11 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       room = targetRoom;
       participantId = `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       participant = joinRoom(room, participantId, name, role, lang as Lang, ws);
+      // Trainer mode: if trainer joins with trainerMode, set it on the room
+      if (role === "trainer" && trainerMode === true) {
+        room.trainerMode = true;
+      }
+      const trainerModeEnabled = room.trainerMode;
 
       ws.send(JSON.stringify({
         type: "room.joined",
@@ -66,6 +71,7 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         code: room.code,
         role,
         lang,
+        trainerMode: trainerModeEnabled,
         participants: getParticipantList(room),
       }));
 

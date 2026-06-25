@@ -248,6 +248,13 @@
             <option value="bn">Bengali (বাংলা)</option>
           </select>
         </div>
+        <div class="form-row" id="trainer-mode-row">
+          <label>Trainer Mode</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="join-trainer-mode" style="width:auto;" />
+            <span style="font-size:0.85rem;color:var(--muted);">Auto VAD (bicara otomatis)</span>
+          </label>
+        </div>
         <button id="btn-join" onclick="joinRoom()">Gabung</button>
         <div style="margin-top:8px; text-align:center;">
           <button class="secondary" onclick="createRoom()">Atau Buat Ruang Baru</button>
@@ -292,6 +299,9 @@
         </div>
         <div style="margin-top:8px; font-size:0.8rem; color:var(--muted);">
           <span id="my-info">-</span>
+        </div>
+        <div id="mic-instructions" style="margin-top:4px; font-size:0.75rem; color:var(--yellow);">
+          Tekan dan tahan tombol mic saat bicara. Lepas untuk kirim.
         </div>
       </div>
 
@@ -360,10 +370,12 @@
     let myRole = null;
     let myLang = null;
     let myName = null;
+    let myTrainerMode = false;
     let participants = [];
     let turns = [];
     let currentTurnId = null;
     let currentSpeakerId = null;
+    let autoTurnActive = false;
 
     // Audio
     let audioCtx = null;
@@ -383,6 +395,7 @@
     let bufferedSamples = 0;
     let isVoiced = false;
     let turnTimer = null;
+    let hasAutoCommitted = false;
     const MAX_TURN_SEC = 30000;
     const VAD_ATTACK = 0.6;
     const VAD_RELEASE = 0.2;
@@ -450,6 +463,7 @@
       const name = document.getElementById('join-name').value.trim();
       const role = document.getElementById('join-role').value;
       const lang = document.getElementById('join-lang').value;
+      const trainerMode = document.getElementById('join-trainer-mode').checked;
       if (!code || !name) {
         notify('Masukkan kode ruang dan nama', 'error');
         return;
@@ -458,8 +472,15 @@
       myRole = role;
       myLang = lang;
       myName = name;
+      myTrainerMode = trainerMode && role === 'trainer';
       document.getElementById('room-code-display').textContent = code;
       document.getElementById('my-info').textContent = `${name} · ${role === 'trainer' ? 'Trainer' : 'Peserta'} · ${lang.toUpperCase()}`;
+      if (myTrainerMode) {
+        document.getElementById('mic-instructions').textContent = 'Trainer Mode: Aktifkan mic sekali, bicara otomatis. Diam = auto-kirim.';
+        document.getElementById('mic-instructions').style.display = 'block';
+      } else {
+        document.getElementById('mic-instructions').textContent = 'Tekan dan tahan tombol mic saat bicara. Lepas untuk kirim.';
+      }
 
       // Connect WebSocket
       const wsUrl = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/room-ws';
@@ -470,7 +491,8 @@
           code,
           name,
           role,
-          lang
+          lang,
+          trainerMode: myTrainerMode
         }));
       };
       ws.onmessage = (e) => {
@@ -512,9 +534,13 @@
       if (type === 'room.joined') {
         participantId = msg.participantId;
         participants = msg.participants || [];
+        myTrainerMode = msg.trainerMode || myTrainerMode;
         updateParticipants();
         showScreen('screen-room');
         notify(`Bergabung sebagai ${myName}`, 'success');
+        if (myRole === 'trainer' && myTrainerMode) {
+          notify('Trainer mode: aktifkan mic sekali, bicara otomatis', 'info');
+        }
       }
       if (type === 'room.participant.joined') {
         participants.push(msg.participant);
@@ -550,8 +576,13 @@
       if (type === 'turn.completed') {
         currentSpeakerId = null;
         updateStatus(STATE.IDLE);
+        turns.push(msg);
         addTurnToLog(msg);
         updateParticipants();
+        if (autoTurnActive && msg.speakerId === participantId) {
+          autoTurnActive = false;
+          hasAutoCommitted = false;
+        }
       }
       if (type === 'turn.cancelled') {
         currentSpeakerId = null;
@@ -560,6 +591,7 @@
       }
       if (type === 'turn.rejected') {
         notify('Sibuk, coba lagi', 'error');
+        autoTurnActive = false;
       }
       if (type === 'response.audio.delta') {
         if (msg.audio) {
@@ -614,8 +646,9 @@
         document.getElementById('mic-icon-off').classList.add('hidden');
         document.getElementById('mic-icon-on').classList.remove('hidden');
 
-        // Request turn
-        if (ws && ws.readyState === WebSocket.OPEN) {
+        // Non-trainer mode: immediately request turn (push-to-talk)
+        // Trainer mode: do NOT request turn here; VAD will trigger it
+        if (ws && ws.readyState === WebSocket.OPEN && !myTrainerMode) {
           ws.send(JSON.stringify({ type: 'turn.request' }));
         }
       } catch (err) {
@@ -640,6 +673,31 @@
       document.getElementById('meter-bar').style.width = '0%';
 
       if (ws && ws.readyState === WebSocket.OPEN) {
+        if (bufferedSamples > 0 && !hasAutoCommitted) {
+          ws.send(JSON.stringify({ type: 'audio.commit' }));
+        } else {
+          ws.send(JSON.stringify({ type: 'turn.cancel' }));
+        }
+      }
+      autoTurnActive = false;
+      hasAutoCommitted = false;
+      bufferedSamples = 0;
+      voicedFrames = 0;
+      silenceFrames = 0;
+      isVoiced = false;
+    }
+    // Auto-VAD: for trainer mode, automatically request turn when speech detected
+    function startAutoTurn() {
+      if (autoTurnActive) return;
+      autoTurnActive = true;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'turn.request' }));
+      }
+    }
+    function stopAutoTurn() {
+      if (!autoTurnActive) return;
+      autoTurnActive = false;
+      if (ws && ws.readyState === WebSocket.OPEN && currentSpeakerId === participantId) {
         ws.send(JSON.stringify({ type: 'turn.cancel' }));
       }
     }
@@ -674,10 +732,15 @@
 
       if (isFrameVoiced && !isVoiced && voicedFrames > 2) {
         isVoiced = true;
+        // Trainer mode: auto-request turn when speech starts
+        if (myTrainerMode && !autoTurnActive && myRole === 'trainer') {
+          startAutoTurn();
+        }
       }
       if (!isFrameVoiced && isVoiced && silenceFrames > SILENCE_FRAMES_THRESHOLD) {
         isVoiced = false;
-        if (bufferedSamples > 0) {
+        if (bufferedSamples > 0 && !hasAutoCommitted) {
+          hasAutoCommitted = true;
           commitAudio();
         }
       }
