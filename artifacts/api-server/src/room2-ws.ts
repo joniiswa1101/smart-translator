@@ -215,7 +215,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
   try {
     // Step 1: ASR (Speech-to-Text)
     const asrStart = Date.now();
-    const sourceText = await transcribeAudio(merged);
+    const sourceText = await transcribeAudio(merged, participant.spokenLang);
     turn.sourceText = sourceText;
     logger.info({ roomCode: room.code, turnId: turn.turnId, asrMs: Date.now() - asrStart, sourceText: sourceText.slice(0, 60) }, "ASR completed");
 
@@ -368,12 +368,13 @@ function cancelTurn2(room: Room2, participant: Participant2) {
 }
 
 // ========== ASR ==========
-async function transcribeAudio(pcmBuffer: Buffer): Promise<string> {
+async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<string> {
   const wav = pcm16ToWav(pcmBuffer, 24000);
   const form = new FormData();
   const blob = new Blob([new Uint8Array(wav)], { type: "audio/wav" });
   form.append("file", blob, "audio.wav");
   form.append("model", "whisper-1");
+  form.append("language", spokenLang); // Force language → prevent Whisper misdetection
 
   const resp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
