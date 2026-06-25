@@ -1,2 +1,3 @@
 - [OpenAI gpt-realtime API quirks](openai-realtime-gpt-realtime-api.md) — GA session config (audio.input.*, turn_detection:null for client VAD) + manual commit→committed→response.create flow
 - [Trainer mode dual-solution pattern](trainer-mode-pattern.md) — server-side `trainerMode` override + client VAD auto-trigger for trainers, push-to-hold for participants
+- [Translator pipeline testing](testing-translator.md) — synthetic TTS can't validate ASR accuracy; test browser has no mic; async mic toggle needs a state machine.

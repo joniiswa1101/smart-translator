@@ -493,7 +493,9 @@
         ws.send(JSON.stringify({ type: 'room.leave' }));
         ws.close();
       }
+      micState = 'off';
       micOn = false;
+      pendingStop = false;
       if (micStream) micStream.getTracks().forEach(t => t.stop());
       if (scriptNode) { scriptNode.disconnect(); scriptNode.onaudioprocess = null; }
       if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
@@ -594,7 +596,11 @@
       }
     }
 
-    let micStarting = false;
+    // Mic lifecycle state machine: 'off' | 'starting' | 'on'
+    // getUserMedia is async — without a 'starting' guard a second tap during
+    // permission/device startup (slow on Android) would launch a concurrent
+    // startMic(), leaking streams and losing the "stop" intent.
+    let micState = 'off';
     let pendingStop = false;
 
     // Called once after join — attaches pointer + touch events to mic button
@@ -623,8 +629,13 @@
       const now = Date.now();
       if (now - lastMicDownTime < 300) return;
       lastMicDownTime = now;
-      if (!micOn) await startMic();
-      else stopMic();
+      if (micState === 'starting') {
+        // Mic still acquiring — record intent to stop once it's ready
+        pendingStop = true;
+        return;
+      }
+      if (micState === 'on') stopMic();
+      else await startMic();
     }
 
     function handleMicUp() { /* toggle mode: no action on release */ }
@@ -632,10 +643,21 @@
     async function micBtnDown(e) { e.preventDefault(); await handleMicDown(e.target, e.pointerId); }
     function micBtnUp(e) { e.preventDefault(); }
     async function startMic() {
+      if (micState !== 'off') return; // re-entry guard
+      micState = 'starting';
+      pendingStop = false;
       try {
         // sampleRate NOT in getUserMedia — Android Chrome throws OverconstrainedError for exact sampleRate.
         // AudioContext({ sampleRate }) handles resampling internally.
         micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+        // User tapped again while acquiring — abort cleanly without going live.
+        if (pendingStop) {
+          pendingStop = false;
+          micState = 'off';
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+          return;
+        }
         audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
         const source = audioCtx.createMediaStreamSource(micStream);
         scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
@@ -650,6 +672,7 @@
           processAudioFrame(inputData);
         };
 
+        micState = 'on';
         micOn = true;
         document.getElementById('btn-mic').className = 'mic-btn on';
         document.getElementById('mic-icon-off').classList.add('hidden');
@@ -664,11 +687,15 @@
         const msg = 'Mic gagal: ' + (err.message || err.name || String(err));
         notify(msg, 'error');
         alert(msg); // visible fallback for mobile
-        micStarting = false;
+        micState = 'off';
+        micOn = false;
         pendingStop = false;
+        if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
       }
     }
     function stopMic() {
+      if (micState === 'off') return; // idempotent
+      micState = 'off';
       micOn = false;
       if (micStream) micStream.getTracks().forEach(t => t.stop());
       if (scriptNode) { scriptNode.disconnect(); scriptNode.onaudioprocess = null; }
