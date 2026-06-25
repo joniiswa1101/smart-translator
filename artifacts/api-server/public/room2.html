@@ -380,7 +380,10 @@
     const VAD_ATTACK = 0.6;
     const VAD_RELEASE = 0.2;
     const AMPLITUDE_THRESHOLD = 0.02;
-    const SILENCE_FRAMES_THRESHOLD = 90;
+    // ~170ms per audio frame (4096 samples @ 24kHz). 12 frames ≈ 2s of silence
+    // before auto-commit. The old value (90 ≈ 15s) meant auto-commit almost never
+    // fired, forcing users to rely on the manual tap-to-stop path.
+    const SILENCE_FRAMES_THRESHOLD = 12;
 
     function showScreen(id) {
       document.querySelectorAll('[id^="screen-"]').forEach(el => el.classList.add('hidden'));
@@ -789,12 +792,18 @@
       }
 
       if (isVoiced || bufferedSamples > 0) {
-        const pcm16 = floatToPCM16(inputData);
-        const base64 = arrayBufferToBase64(pcm16);
+        // Only buffer+count audio that is ACTUALLY sent to the server. Counting
+        // unsent frames (e.g. captured before turn.granted sets state=LISTENING)
+        // made the client believe it had audio and send audio.commit while the
+        // server buffer was empty — which left the room stuck busy and locked the
+        // peserta out (macet). Now: no send => no count => stopMic sends a clean
+        // turn.cancel instead of a bogus commit.
         if (ws && ws.readyState === WebSocket.OPEN && state === STATE.LISTENING && currentSpeakerId === participantId) {
+          const pcm16 = floatToPCM16(inputData);
+          const base64 = arrayBufferToBase64(pcm16);
           ws.send(JSON.stringify({ type: 'audio.append', audio: base64 }));
+          bufferedSamples += inputData.length;
         }
-        bufferedSamples += inputData.length;
       }
       if (isVoiced && bufferedSamples > MAX_TURN_SEC * SAMPLE_RATE / 1000) commitAudio();
     }

@@ -198,24 +198,40 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 async function commitAudioTurn2(room: Room2, participant: Participant2) {
   const totalLen = room.audioBuffer.reduce((acc, b) => acc + b.length, 0);
   const merged = Buffer.concat(room.audioBuffer, totalLen);
-  if (merged.length === 0) return;
+  // Empty buffer = no audio was actually captured (common on mobile when the mic
+  // race drops frames before turn.granted, or a stray commit arrives). A bare
+  // `return` here used to leave the room stuck isListening=true with this speaker
+  // forever — which permanently locks out participants, because only a trainer
+  // can steal a busy room. Cancel + reset instead so the next turn.request works.
+  if (merged.length === 0) {
+    cancelTurn2(room, participant);
+    return;
+  }
 
   room.isListening = false;
   room.isProcessing = true;
 
+  // Capture the turn this pipeline belongs to. If a trainer steals (cancel + new
+  // turn) while we await ASR/translate/TTS below, room.currentTurn changes. We must
+  // NOT finalize or reset room state for a stale turn, or we'd clobber the trainer's
+  // active turn (e.g. leave isListening=true with currentSpeaker=null — an
+  // unrecoverable stuck state). isStale() lets each async step bail out cleanly.
+  const turn = room.currentTurn!;
+  const isStale = () => room.currentTurn !== turn;
+
   broadcastToRoom2(room, {
     type: "turn.processing",
-    turnId: room.currentTurn?.turnId,
+    turnId: turn.turnId,
     speakerId: participant.id,
   });
 
-  const turn = room.currentTurn!;
   const allParticipants = Array.from(room.participants.values());
 
   try {
     // Step 1: ASR (Speech-to-Text)
     const asrStart = Date.now();
     const sourceText = await transcribeAudio(merged, participant.spokenLang);
+    if (isStale()) return; // turn stolen/cancelled mid-ASR — abort, don't touch room state
     turn.sourceText = sourceText;
     logger.info({ roomCode: room.code, turnId: turn.turnId, asrMs: Date.now() - asrStart, sourceText: sourceText.slice(0, 60) }, "ASR completed");
 
@@ -239,6 +255,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
         return { lang, text };
       }),
     );
+    if (isStale()) return; // turn stolen/cancelled mid-translate — abort
     logger.info({ roomCode: room.code, turnId: turn.turnId, translateMs: Date.now() - translateStart }, "Translation completed");
 
     // Step 4: TTS for each target (parallel, non-streaming but chunked)
@@ -275,6 +292,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     });
 
     const ttsResults = await Promise.all(ttsPromises);
+    if (isStale()) return; // turn stolen/cancelled mid-TTS — abort
     logger.info({ roomCode: room.code, turnId: turn.turnId, ttsMs: Date.now() - ttsStart }, "TTS completed");
 
     // Step 4b: Direct source audio for participants who need sourceLang
@@ -338,6 +356,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     room.audioBuffer = [];
 
   } catch (err: any) {
+    if (isStale()) return; // pipeline failed but turn already stolen/cancelled — nothing to reset
     logger.error({ err: err.message, roomCode: room.code, turnId: turn.turnId }, "Pipeline error");
     broadcastToRoom2(room, {
       type: "pipeline.error",
