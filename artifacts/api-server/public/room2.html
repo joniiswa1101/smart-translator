@@ -221,14 +221,14 @@
         </div>
         <div class="form-row">
           <label>Bahasa Bicara</label>
-          <select id="join-spoken">
+          <select id="join-spoken" onchange="syncHearLang()">
             <option value="id">Bahasa Indonesia</option>
             <option value="en">English</option>
             <option value="bn">Bengali (বাংলা)</option>
           </select>
         </div>
         <div class="form-row">
-          <label>Bahasa Dengar</label>
+          <label>Bahasa Dengar <span style="font-size:0.7rem;color:var(--muted);">(otomatis)</span></label>
           <select id="join-hear">
             <option value="id">Bahasa Indonesia</option>
             <option value="en">English</option>
@@ -431,6 +431,11 @@
       const row = document.getElementById('trainer-mode-row');
       row.style.display = role === 'trainer' ? 'flex' : 'none';
     }
+    // Sync hearLang = spokenLang secara default (bisa diubah manual)
+    function syncHearLang() {
+      const spoken = document.getElementById('join-spoken').value;
+      document.getElementById('join-hear').value = spoken;
+    }
     // Show trainer mode checkbox on initial load (default role is trainer)
     toggleTrainerModeUI();
 
@@ -443,10 +448,6 @@
       const trainerMode = role === 'trainer' && document.getElementById('join-trainer-mode').checked;
       if (!code || !name) {
         notify('Masukkan kode ruang dan nama', 'error');
-        return;
-      }
-      if (spokenLang === hearLang) {
-        notify('Bahasa bicara dan dengar tidak boleh sama', 'error');
         return;
       }
       roomCode = code;
