@@ -264,7 +264,7 @@
         <div class="card-title">Kontrol Saya</div>
         <div style="display:flex; align-items:center; gap:16px;">
           <div class="mic-controls">
-            <button id="btn-mic" class="mic-btn off" onclick="toggleMic()">
+            <button id="btn-mic" class="mic-btn off" onpointerdown="micBtnDown(event)" onpointerup="micBtnUp(event)" onpointerleave="micBtnUp(event)" style="user-select:none; touch-action:none;">
               <svg id="mic-icon-off" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
               <svg id="mic-icon-on" class="hidden" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.65 1.65c-.67.33-1.41.53-2.3.53a5.98 5.98 0 0 1-5.94-5.24H5.01c.03.78.24 1.52.59 2.2L4.5 15.08c-.57-1.04-.88-2.23-.88-3.46h-2c0 1.63.42 3.16 1.15 4.52L1.7 17.78A9.962 9.962 0 0 0 11 21.95V24h2v-2.05a9.98 9.98 0 0 0 5.7-3.23l2.04 2.04L21.73 21 4.27 3z"/></svg>
             </button>
@@ -587,9 +587,13 @@
       }
     }
 
-    async function toggleMic() {
+    async function micBtnDown(e) {
+      e.preventDefault();
       if (!micOn) await startMic();
-      else stopMic();
+    }
+    async function micBtnUp(e) {
+      e.preventDefault();
+      if (micOn) stopMic();
     }
     async function startMic() {
       try {
