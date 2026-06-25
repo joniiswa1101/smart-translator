@@ -56,28 +56,29 @@ function generateCode(): string {
   return code;
 }
 
-// Determine which languages each participant needs to hear
-// Exclude the speaker's own language
+// Determine which languages each participant needs to hear.
+// Exclude only the actual speaker (by id) — NOT everyone who shares the
+// speaker's language. Otherwise a same-language listener (e.g. trainer ID +
+// peserta ID) would receive nothing when the speaker talks.
 export function getTargetLangsForParticipant(
   participant: Participant2,
-  sourceLang: Lang,
-  allParticipants: Participant2[],
+  speakerId: string,
 ): Lang[] {
   const targets: Lang[] = [];
-  // If this is the speaker, they don't need to hear anything
-  if (participant.spokenLang === sourceLang) {
+  // The speaker themselves don't need to hear anything back.
+  if (participant.id === speakerId) {
     return targets;
   }
-  // Everyone else hears in their hearLang
+  // Everyone else hears in their hearLang (locked = their spokenLang).
   targets.push(participant.hearLang);
   return targets;
 }
 
-// Get all unique target languages needed for a given source
-export function getAllTargetLangs(sourceLang: Lang, allParticipants: Participant2[]): Lang[] {
+// Get all unique target languages needed, excluding the speaker by id.
+export function getAllTargetLangs(allParticipants: Participant2[], speakerId: string): Lang[] {
   const langs = new Set<Lang>();
   for (const p of allParticipants) {
-    if (p.spokenLang !== sourceLang) {
+    if (p.id !== speakerId) {
       langs.add(p.hearLang);
     }
   }

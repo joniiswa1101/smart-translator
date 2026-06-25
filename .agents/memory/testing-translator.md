@@ -59,3 +59,14 @@ description: How to validate Solusi B (room2) ASR→translate→TTS routing and 
 - **How to apply:** Use ONE shared playback AudioContext; create + resume() it inside user
   gestures (join button, mic tap); resume() again before each playback. Never new-up a
   context per chunk. Mic-capture context worked only because it was made on the mic tap.
+
+## Solusi B routing/ASR durable lessons
+- **Exclude recipients by SPEAKER IDENTITY, not by language.** Fan-out must skip only the
+  actual speaker (compare participant id == turn.speakerId). Skipping everyone who *shares*
+  the speaker's language silently drops audio for same-language non-speakers (e.g. trainer ID
+  + peserta ID → peserta hears nothing). Realistic in this product, so guard against it.
+- **whisper-1 is unusable for Bengali speech** — it returns random ID/EN text and rejects
+  `language=bn` (400). gpt-4o-transcribe is the multilingual ASR choice here. Bengali accuracy
+  can only be validated with REAL human audio; synthetic TTS garbles bn so you cannot self-test it.
+- **Listening language is locked = speaking language** (user decision: simplest, impossible to
+  mis-set). Everyone always hears in their own language; there is no independent "Dengar" choice.

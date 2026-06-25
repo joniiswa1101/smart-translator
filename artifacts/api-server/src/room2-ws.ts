@@ -226,7 +226,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     });
 
     // Step 2: Determine target languages (exclude sourceLang — no translation needed)
-    const targetLangs = getAllTargetLangs(turn.sourceLang, allParticipants).filter(
+    const targetLangs = getAllTargetLangs(allParticipants, turn.speakerId).filter(
       (lang) => lang !== turn.sourceLang,
     );
     logger.info({ roomCode: room.code, turnId: turn.turnId, targetLangs }, "Target languages");
@@ -252,7 +252,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
           audioChunks.push(chunk);
           // Fan-out audio chunk to participants who need this language
           for (const p of allParticipants) {
-            const neededLangs = getTargetLangsForParticipant(p, turn.sourceLang, allParticipants);
+            const neededLangs = getTargetLangsForParticipant(p, turn.speakerId);
             if (neededLangs.includes(lang)) {
               sendToParticipant2(p, {
                 type: "response.audio.delta",
@@ -287,7 +287,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
       sourceAudioChunks.push(base64);
       if (!sourceFirstByteAt) sourceFirstByteAt = Date.now();
       for (const p of allParticipants) {
-        const neededLangs = getTargetLangsForParticipant(p, turn.sourceLang, allParticipants);
+        const neededLangs = getTargetLangsForParticipant(p, turn.speakerId);
         if (neededLangs.includes(turn.sourceLang)) {
           sendToParticipant2(p, {
             type: "response.audio.delta",
@@ -314,7 +314,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
 
     // Fan-out completion
     for (const p of allParticipants) {
-      const neededLangs = getTargetLangsForParticipant(p, turn.sourceLang, allParticipants);
+      const neededLangs = getTargetLangsForParticipant(p, turn.speakerId);
       const myTranslations = turn.targets
         .filter((r) => neededLangs.includes(r.lang))
         .map((r) => ({ lang: r.lang, text: r.text }));
@@ -378,9 +378,11 @@ async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<s
   const form = new FormData();
   const blob = new Blob([new Uint8Array(wav)], { type: "audio/wav" });
   form.append("file", blob, "audio.wav");
-  form.append("model", "whisper-1");
+  // gpt-4o-transcribe: newer, more accurate & multilingual than whisper-1
+  // (better for Bengali). Same /audio/transcriptions endpoint, returns { text }.
+  form.append("model", "gpt-4o-transcribe");
   // Only send the hint for supported langs (prevents misdetection for id/en).
-  // For bn, omit it and let Whisper auto-detect (passing "bn" 400s).
+  // For bn, omit it and let the model auto-detect (passing "bn" can 400).
   if (WHISPER_HINT_LANGS.has(spokenLang)) {
     form.append("language", spokenLang);
   }

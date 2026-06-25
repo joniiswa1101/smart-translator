@@ -7,7 +7,7 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta. D
 - `pnpm --filter @workspace/api-server run dev` — run the API server (serves app at `/`)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- Required env: `OPENAI_API_KEY` — used server-side only (ephemeral secrets, whisper-1, gpt-4o-mini, tts-1)
+- Required env: `OPENAI_API_KEY` — used server-side only (ephemeral secrets, gpt-4o-transcribe, gpt-4o-mini, tts-1)
 
 ## Stack
 
@@ -40,8 +40,9 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta. D
 ## Architecture decisions
 
 - **Ephemeral secret pattern (A)**: Server mints short-lived OpenAI client secret for gpt-realtime. API key never leaves the server.
-- **Pivot-teks (B)**: Audio → whisper-1 ASR → gpt-4o-mini translate → tts-1 TTS → chunked fan-out. Lebih fleksibel, lebih murah, ~60% lower cost.
+- **Pivot-teks (B)**: Audio → gpt-4o-transcribe ASR → gpt-4o-mini translate → tts-1 TTS → chunked fan-out. Lebih fleksibel, lebih murah, ~60% lower cost.
 - **Individual routing (B)**: Tiap peserta dengar hanya bahasa yang diinginkan (hearLang). Skip jika sama dengan sumber.
+- **Dengar dikunci = Bicara (B)**: hearLang selalu = spokenLang. Setiap orang selalu mendengar dalam bahasanya sendiri (selector Dengar di-disable di UI). Keputusan user: paling sederhana, tidak bisa salah set.
 - **Speaker lock**: Selama ada peserta aktif bicara, yang lain tidak bisa mencuri giliran.
 - **VAD is client-side**: RMS amplitude + silence timer. Threshold 0.02, 1.5s silence.
 - **24kHz PCM16**: Matches OpenAI spec for both realtime and tts-1.
@@ -54,7 +55,7 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta. D
 - **Limitasi**: Hanya 2 bahasa, semua dengar sama
 
 ## Solusi B: Multi-output (Individual)
-- **Pipeline**: Client → Server → whisper-1 ASR → gpt-4o-mini translate → tts-1 TTS → Fan-out individual
+- **Pipeline**: Client → Server → gpt-4o-transcribe ASR → gpt-4o-mini translate → tts-1 TTS → Fan-out individual
 - **Routing**: Tiap peserta terima audio/text dalam hearLang-nya masing-masing
 - **Latency**: ~1500-4000ms (tergantung panjang ucapan)
 - **Keunggulan**: 3 bahasa, individual, lebih murah, lebih fleksibel
@@ -75,7 +76,7 @@ Sistem multi-bahasa (Indonesia, Inggris, Bengali) untuk 1 Trainer + 3 Peserta. D
 - Solusi B pakai `tts-1` (bukan gpt-4o-mini-tts) karena tidak support streaming
 - Voice mapping: id=allo, en=echo, bn=alloy
 - Bengali sebagai OUTPUT (Dengar/hearLang BN) didukung penuh: gpt-4o-mini translate→bn + tts-1→bn. Validasi akurasi butuh audio nyata.
-- Bengali sebagai INPUT (Bicara/spokenLang BN) TIDAK didukung resmi oleh whisper-1: param `language=bn` ditolak 400 (unsupported_language). Solusi: jangan kirim language hint untuk bn (auto-detect). Hint hanya untuk id/en (lihat WHISPER_HINT_LANGS di room2-ws.ts). Akurasi ASR Bengali tetap tidak terjamin.
+- Bengali sebagai INPUT (Bicara/spokenLang BN): whisper-1 gagal total (mengubah Bengali jadi teks ID/EN acak) DAN menolak `language=bn` (400). Karena itu ASR diganti ke `gpt-4o-transcribe` (lebih multibahasa). Hint bahasa tetap hanya untuk id/en (lihat WHISPER_HINT_LANGS di room2-ws.ts); bn pakai auto-detect. Akurasi Bengali tetap perlu divalidasi dengan suara asli.
 
 ## Pointers
 

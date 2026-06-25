@@ -228,12 +228,13 @@
           </select>
         </div>
         <div class="form-row">
-          <label>Bahasa Dengar <span style="font-size:0.7rem;color:var(--muted);">(otomatis)</span></label>
-          <select id="join-hear">
+          <label>Bahasa Dengar <span style="font-size:0.7rem;color:var(--muted);">(otomatis = Bicara)</span></label>
+          <select id="join-hear" disabled style="opacity:0.7; cursor:not-allowed;">
             <option value="id">Bahasa Indonesia</option>
             <option value="en">English</option>
             <option value="bn">Bengali (বাংলা)</option>
           </select>
+          <span style="font-size:0.7rem;color:var(--muted);">Setiap orang selalu mendengar dalam bahasanya sendiri.</span>
         </div>
         <button id="btn-join" onclick="joinRoom()">Gabung</button>
         <div style="margin-top:8px; text-align:center;">
@@ -457,7 +458,8 @@
       const name = document.getElementById('join-name').value.trim();
       const role = document.getElementById('join-role').value;
       const spokenLang = document.getElementById('join-spoken').value;
-      const hearLang = document.getElementById('join-hear').value;
+      // Locked policy: everyone hears in their OWN language (Dengar = Bicara).
+      const hearLang = spokenLang;
       const trainerMode = role === 'trainer' && document.getElementById('join-trainer-mode').checked;
       if (!code || !name) {
         notify('Masukkan kode ruang dan nama', 'error');
