@@ -33,3 +33,11 @@ description: How to validate Solusi B (room2) ASR→translate→TTS routing and 
 - **How to apply:** Use `micState: 'off'|'starting'|'on'` + a `pendingStop` flag. Tap during
   'starting' sets pendingStop; startMic aborts cleanly if pendingStop is set when getUserMedia
   resolves; startMic/stopMic are re-entry-guarded and idempotent.
+
+## Trainer-mode broadcasts to ALL clients — peserta must still push-to-talk
+- **Why:** Server sends `room.trainerMode` to every client via `room.joined`, so a peserta's
+  local `myTrainerMode` becomes true in a trainer-mode room. If startMic defers turn.request
+  to VAD whenever `myTrainerMode` is true, the peserta's mic turns on but no turn is ever
+  requested → status "IDLE forever", audio rejected, no translation. (Real reported bug.)
+- **How to apply:** Only the TRAINER defers to VAD: `deferToVad = myTrainerMode && myRole==='trainer'`.
+  Peserta always sends turn.request on mic ON, regardless of room trainer mode.

@@ -678,9 +678,12 @@
         document.getElementById('mic-icon-off').classList.add('hidden');
         document.getElementById('mic-icon-on').classList.remove('hidden');
 
-        // Non-trainer mode: immediately request turn (push-to-talk)
-        // Trainer mode: do NOT request turn here; VAD will trigger it
-        if (ws && ws.readyState === WebSocket.OPEN && !myTrainerMode) {
+        // Push-to-talk: request turn immediately on mic ON.
+        // EXCEPTION: only the trainer in trainer mode defers to VAD (auto-request
+        // on speech). Peserta ALWAYS push-to-talk, even in a trainer-mode room —
+        // otherwise their mic turns on but no turn is ever requested (IDLE forever).
+        const deferToVad = myTrainerMode && myRole === 'trainer';
+        if (ws && ws.readyState === WebSocket.OPEN && !deferToVad) {
           ws.send(JSON.stringify({ type: 'turn.request' }));
         }
       } catch (err) {
