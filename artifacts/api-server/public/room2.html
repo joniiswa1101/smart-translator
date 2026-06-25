@@ -587,13 +587,33 @@
       }
     }
 
+    let micStarting = false;
+    let pendingStop = false;
+
     async function micBtnDown(e) {
       e.preventDefault();
-      if (!micOn) await startMic();
+      // Trainer + trainer mode = toggle (klik ON, klik lagi OFF)
+      if (myTrainerMode && myRole === 'trainer') {
+        if (!micOn) await startMic();
+        else stopMic();
+        return;
+      }
+      // Peserta = push-to-hold; handle async getUserMedia
+      if (!micOn && !micStarting) {
+        pendingStop = false;
+        micStarting = true;
+        await startMic();
+        micStarting = false;
+        if (pendingStop) { stopMic(); pendingStop = false; }
+      }
     }
-    async function micBtnUp(e) {
+    function micBtnUp(e) {
       e.preventDefault();
+      // Trainer: no-op on up
+      if (myTrainerMode && myRole === 'trainer') return;
+      // Peserta: stop if mic ready, else flag for stop after startMic
       if (micOn) stopMic();
+      else if (micStarting) pendingStop = true;
     }
     async function startMic() {
       try {
