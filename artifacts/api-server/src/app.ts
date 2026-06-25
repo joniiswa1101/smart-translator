@@ -58,4 +58,8 @@ app.get("/room2", (_req, res) => {
   res.sendFile(path.join(publicDir, "room2.html"));
 });
 
+app.get("/asr-test", (_req, res) => {
+  res.sendFile(path.join(publicDir, "asr-test.html"));
+});
+
 export default app;

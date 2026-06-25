@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ASR Model Proof — Smart Translator</title>
+  <style>
+    :root { --bg:#0e0e1a; --card:#1a1a2e; --text:#e0e0e0; --accent:#8b5cf6; --ok:#4ade80; --warn:#f59e0b; --err:#f87171; --muted:#94a3b8; }
+    body { background:var(--bg); color:var(--text); font-family:system-ui, sans-serif; margin:0; padding:16px; line-height:1.6; }
+    .container { max-width:800px; margin:auto; }
+    h1 { text-align:center; font-size:1.5rem; margin:8px 0; }
+    h2 { font-size:1.1rem; margin:20px 0 8px; border-bottom:1px solid #2a2a4a; padding-bottom:6px; }
+    .subtitle { text-align:center; color:var(--muted); font-size:0.85rem; margin-bottom:20px; }
+    .card { background:var(--card); border-radius:12px; padding:16px; margin-bottom:12px; }
+    .badge { display:inline-block; background:var(--accent); color:#fff; border-radius:6px; padding:2px 8px; font-size:0.78rem; }
+    .badge-ok { background:var(--ok); color:#0a2a15; }
+    .badge-warn { background:var(--warn); color:#2a1a0a; }
+    .badge-err { background:var(--err); color:#2a0a0a; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    th, td { border-bottom:1px solid #2a2a4a; padding:8px; text-align:left; font-size:0.85rem; }
+    th { color:var(--muted); font-weight:600; }
+    td code { background:#222; padding:2px 4px; border-radius:4px; }
+    .btn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:10px 18px; font-size:1rem; cursor:pointer; }
+    .btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .record-area { display:flex; flex-direction:column; gap:8px; align-items:center; margin-top:12px; }
+    .record-btn { width:80px; height:80px; border-radius:50%; border:none; background:var(--warn); color:#2a1a0a; font-size:0.8rem; font-weight:700; cursor:pointer; transition:background 0.2s; }
+    .record-btn.recording { background:var(--err); animation:pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.05);} }
+    .audio-playback { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+    .result { margin-top:12px; padding:10px; border-radius:8px; background:#0a1a0a; border:1px solid #2a4a2a; }
+    .result-title { font-weight:600; color:var(--ok); font-size:0.85rem; margin-bottom:4px; }
+    .result-warn { border-color:#4a4a2a; background:#1a1a0a; }
+    .result-warn .result-title { color:var(--warn); }
+    .small { font-size:0.75rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>ASR Model Verification</h1>
+    <div class="subtitle">Bukti server menggunakan <code>gpt-4o-transcribe</code> (bukan whisper-1)</div>
+
+    <div class="card">
+      <h2>1. Konfigurasi Server</h2>
+      <p class="small">Data ini diambil langsung dari <code>/api/config</code> — Anda bisa cek sendiri via curl atau browser.</p>
+      <table>
+        <thead><tr><th>Properti</th><th>Nilai</th></tr></thead>
+        <tbody id="config-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>2. Perbandingan Model</h2>
+      <table>
+        <thead><tr><th>Aspek</th><th>whisper-1</th><th>gpt-4o-transcribe</th></tr></thead>
+        <tbody>
+          <tr><td>Bengali <code>language=bn</code></td><td><span class="badge badge-err">400 Error</span></td><td><span class="badge badge-ok">Auto-detect</span></td></tr>
+          <tr><td>Transkripsi Bengali</td><td><span class="badge badge-err">Gagal</span></td><td><span class="badge badge-warn">Perlu tes nyata</span></td></tr>
+          <tr><td>Endpoint</td><td><code>/v1/audio/transcriptions</code></td><td><code>/v1/audio/transcriptions</code></td></tr>
+          <tr><td>Format respons</td><td><code>{ "text": "..." }</code></td><td><code>{ "text": "..." }</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>3. Uji Coba Langsung</h2>
+      <p>Rekam suara Anda (Bengali, Indonesia, atau Inggris) lalu server akan transkripsi. Hasilnya langsung tampil.</p>
+      <div class="record-area">
+        <div class="small">Pilih bahasa:</div>
+        <div>
+          <select id="lang-select">
+            <option value="bn">Bengali (auto-detect)</option>
+            <option value="id">Bahasa Indonesia</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <button class="record-btn" id="record-btn" onclick="toggleRecord()">
+          <span id="record-label">REC</span>
+        </button>
+        <div class="small" id="record-status">Siap merekam</div>
+        <div class="audio-playback" id="audio-playback"></div>
+      </div>
+      <div id="results"></div>
+    </div>
+
+    <div class="card">
+      <h2>4. Cara Verifikasi Manual</h2>
+      <p class="small">Jika Anda ingin memeriksa sendiri tanpa percaya pada halaman ini:</p>
+      <ol>
+        <li>Buka file ini di kode: <code>artifacts/api-server/src/room2-ws.ts</code>, baris ~383</li>
+        <li>Lihat <code>form.append("model", "...")</code> — ini bukti model yang dikirim ke OpenAI</li>
+        <li>Atau cek <code>cat /api/config</code> via curl:</li>
+        <li><code>curl https://[domain-anda]/api/config</code> → harus ada <code>asrModel:"gpt-4o-transcribe"</code></li>
+      </ol>
+    </div>
+
+    <div class="small" style="text-align:center;margin-top:16px;">
+      <a href="/room2" style="color:var(--accent);">Kembali ke Room2</a>
+    </div>
+  </div>
+
+  <script>
+    async function loadConfig() {
+      try {
+        const r = await fetch('/api/config');
+        const d = await r.json();
+        const tbody = document.getElementById('config-body');
+        const rows = Object.entries(d).map(([k,v]) => {
+          const badge = typeof v==='boolean' ? (v?'<span class="badge badge-ok">true</span>':'<span class="badge badge-err">false</span>') : `<code>${JSON.stringify(v)}</code>`;
+          return `<tr><td><strong>${k}</strong></td><td>${badge}</td></tr>`;
+        }).join('');
+        tbody.innerHTML = rows;
+      } catch (e) {
+        document.getElementById('config-body').innerHTML = `<tr><td colspan="2"><span class="badge badge-err">Error load config</span></td></tr>`;
+      }
+    }
+    loadConfig();
+
+    let mediaRecorder;
+    let audioChunks = [];
+    async function toggleRecord() {
+      const btn = document.getElementById('record-btn');
+      const label = document.getElementById('record-label');
+      const status = document.getElementById('record-status');
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+          btn.classList.remove('recording');
+          label.textContent = 'REC';
+          status.textContent = 'Proses...';
+          stream.getTracks().forEach(t => t.stop());
+          const blob = new Blob(audioChunks, { type: 'audio/webm' });
+          const url = URL.createObjectURL(blob);
+          document.getElementById('audio-playback').innerHTML = `<audio controls src="${url}"></audio>`;
+          await transcribeAndShow(blob);
+        };
+        mediaRecorder.start();
+        btn.classList.add('recording');
+        label.textContent = 'STOP';
+        status.textContent = 'Merekam...';
+      } catch (e) {
+        status.textContent = 'Error: ' + e.message;
+      }
+    }
+    async function transcribeAndShow(blob) {
+      const status = document.getElementById('record-status');
+      const lang = document.getElementById('lang-select').value;
+      const results = document.getElementById('results');
+      try {
+        const fd = new FormData();
+        fd.append('audio', blob, 'recording.webm');
+        const r = await fetch(`/api/asr-test?lang=${lang}`, { method: 'POST', body: fd });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Server error');
+        const model = d.model || 'unknown';
+        const cls = model === 'gpt-4o-transcribe' ? 'result' : 'result result-warn';
+        results.innerHTML = `<div class="${cls}"><div class="result-title">Model: ${model}</div><div style="font-size:0.85rem;">Bahasa: ${d.lang}</div><div style="margin-top:8px; font-size:1rem;"><strong>${d.text}</strong></div></div>`;
+        status.textContent = 'Selesai.';
+      } catch (e) {
+        status.textContent = 'Error: ' + e.message;
+        results.innerHTML = `<div class="result result-warn"><div class="result-title">Error</div><div>${e.message}</div></div>`;
+      }
+    }
+  </script>
+</body>
+</html>
