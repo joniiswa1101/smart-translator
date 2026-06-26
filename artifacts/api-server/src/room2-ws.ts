@@ -488,7 +488,7 @@ async function ttsGenerate(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "tts-1",
+      model: "tts-1-hd",
       voice: voiceMap[lang],
       input: text,
       response_format: "pcm",
