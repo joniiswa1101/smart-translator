@@ -330,6 +330,24 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     turn.completedAt = Date.now();
     turn.totalGap = turn.completedAt - turn.startedAt;
 
+    // DIAGNOSTIC: log exactly what audio lang+text each participant receives.
+    // This is the ground truth for "I hear Bengali instead of Indonesian" reports.
+    logger.info(
+      {
+        roomCode: room.code,
+        turnId: turn.turnId,
+        speaker: `${turn.speakerName}(${turn.sourceLang})`,
+        audioFanout: allParticipants.map((p) => {
+          const needed = getTargetLangsForParticipant(p, turn.speakerId);
+          const heard = turn.targets
+            .filter((r) => needed.includes(r.lang))
+            .map((r) => `${r.lang}:"${r.text}"`);
+          return `${p.name}[${p.role},hear=${p.hearLang}] <= ${heard.join(" | ") || "(nothing)"}`;
+        }),
+      },
+      "Audio fan-out summary",
+    );
+
     // Fan-out completion
     for (const p of allParticipants) {
       const neededLangs = getTargetLangsForParticipant(p, turn.speakerId);
