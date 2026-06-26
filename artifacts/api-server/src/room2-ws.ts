@@ -473,7 +473,7 @@ async function ttsGenerate(
   onChunk: (chunk: string) => void,
   onFirstByte: () => void,
 ): Promise<{ audioChunks: string[]; firstByteAt: number | null }> {
-  const voiceMap: Record<Lang, string> = { id: "shimmer", en: "echo", bn: "alloy" };
+  const voiceMap: Record<Lang, string> = { id: "nova", en: "echo", bn: "alloy" };
   const resp = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: {
@@ -481,10 +481,11 @@ async function ttsGenerate(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "tts-1",
+      model: "gpt-4o-mini-tts",
       voice: voiceMap[lang],
       input: text,
       response_format: "pcm",
+      instructions: `Speak in natural ${lang === "id" ? "Indonesian" : lang === "en" ? "English" : "Bengali"}. Use native pronunciation, correct accent, and natural intonation. This is a spoken translation for a language learning context.`,
     }),
   });
   if (!resp.ok) {
