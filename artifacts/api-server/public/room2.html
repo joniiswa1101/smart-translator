@@ -139,15 +139,6 @@
     .participant .badge.trainer { background: rgba(251,146,60,0.15); border-color: var(--orange); color: var(--orange); }
 
     .mic-controls { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
-    .mic-btn {
-      width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-      border: none; cursor: pointer; transition: all 0.2s;
-    }
-    .mic-btn.on { background: var(--red); }
-    .mic-btn.on:hover { background: #dc2626; }
-    .mic-btn.off { background: var(--surface2); border: 2px solid var(--border); }
-    .mic-btn.off:hover { background: var(--surface); }
-    .mic-btn svg { width: 24px; height: 24px; fill: white; }
 
     .meter-container {
       flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; position: relative;
@@ -266,25 +257,25 @@
         <div class="card-title">Kontrol Saya</div>
         <div style="display:flex; align-items:center; gap:16px;">
           <div class="mic-controls">
-            <button id="btn-mic" class="mic-btn off" style="user-select:none; touch-action:none;">
-              <svg id="mic-icon-off" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-              <svg id="mic-icon-on" class="hidden" viewBox="0 0 24 24"><path d="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.65 1.65c-.67.33-1.41.53-2.3.53a5.98 5.98 0 0 1-5.94-5.24H5.01c.03.78.24 1.52.59 2.2L4.5 15.08c-.57-1.04-.88-2.23-.88-3.46h-2c0 1.63.42 3.16 1.15 4.52L1.7 17.78A9.962 9.962 0 0 0 11 21.95V24h2v-2.05a9.98 9.98 0 0 0 5.7-3.23l2.04 2.04L21.73 21 4.27 3z"/></svg>
-            </button>
-            <div class="meter-container">
+            <div class="meter-container" style="width:120px;">
               <div class="meter-bar" id="meter-bar"></div>
               <div class="meter-threshold" id="meter-threshold" style="left:20%"></div>
             </div>
+          </div>
+          <div id="vad-indicator" style="display:flex; align-items:center; gap:8px; margin-left:8px;">
+            <span id="vad-dot" style="display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--green); animation:pulse 1s infinite;"></span>
+            <span id="vad-text" style="font-size:0.8rem; color:var(--muted);">Mic aktif</span>
           </div>
         </div>
         <div id="mic-hint" style="margin-top:8px; font-size:0.8rem; color:var(--muted);">
           <span id="my-info">-</span>
         </div>
         <div id="mic-instructions" style="margin-top:4px; font-size:0.75rem; color:var(--yellow);">
-          Tap tombol mic untuk mulai merekam. Tap lagi untuk kirim.
+          Bicara langsung — mic akan mendengarkan otomatis. Bicara pelan, jelas, dan pakai headphone.
         </div>
         <div id="mic-ready-indicator" style="margin-top:4px; font-size:0.8rem; color:var(--accent); display:none; font-weight:600;">
           <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent); margin-right:6px; animation:pulse 1s infinite;"></span>
-          Mic siap! Bicara sekarang.
+          Mendengarkan...
         </div>
       </div>
 
@@ -563,12 +554,7 @@
         ws.send(JSON.stringify({ type: 'room.leave' }));
         ws.close();
       }
-      micState = 'off';
-      micOn = false;
-      pendingStop = false;
-      if (micStream) micStream.getTracks().forEach(t => t.stop());
-      if (scriptNode) { scriptNode.disconnect(); scriptNode.onaudioprocess = null; }
-      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
+      stopMic();
       showScreen('screen-join');
     }
 
@@ -581,14 +567,8 @@
         myTrainerMode = msg.trainerMode || myTrainerMode;
         updateParticipants();
         showScreen('screen-room');
-        setupMicButton();
-        // Update mic instructions based on role
-        const instr = document.getElementById('mic-instructions');
-        if (myRole === 'trainer' && myTrainerMode) {
-          instr.textContent = 'Trainer Auto-VAD: tap tombol mic sekali, VAD otomatis mendeteksi bicara.';
-        } else {
-          instr.textContent = 'Tap tombol mic untuk mulai merekam. Tap lagi untuk kirim.';
-        }
+        // Auto-VAD: start mic immediately after joining. No manual button needed.
+        startMicAuto();
         notify(`Bergabung sebagai ${myName}`, 'success');
       }
       if (type === 'room.participant.joined') {
@@ -608,18 +588,22 @@
         updateStatus(STATE.LISTENING);
         if (msg.speakerId === participantId) {
           notify('Giliran Anda bicara!', 'success');
-          // CRITICAL: flush audio captured before turn.granted arrived. The user
-          // started speaking immediately after tapping mic, but server was still
-          // processing turn.request. This buffer prevents the first words being lost.
+          // CRITICAL: flush audio captured before turn.granted arrived.
           if (pendingAudioBuffer.length > 0) {
             for (const chunk of pendingAudioBuffer) {
               ws.send(JSON.stringify({ type: 'audio.append', audio: chunk }));
-              bufferedSamples += 4800; // approximate samples per chunk
+              bufferedSamples += 4800;
             }
             pendingAudioBuffer = [];
           }
+          // VAD indicator: this user is now speaking
+          document.getElementById('vad-dot').style.background = 'var(--accent)';
+          document.getElementById('vad-text').textContent = 'Mendengarkan...';
         } else {
           notify(`${msg.speakerName} sedang bicara...`, 'info');
+          // VAD indicator: someone else is speaking
+          document.getElementById('vad-dot').style.background = 'var(--yellow)';
+          document.getElementById('vad-text').textContent = 'Orang lain bicara';
         }
         updateParticipants();
       }
@@ -627,6 +611,8 @@
         updateStatus(STATE.PROCESSING);
         if (msg.speakerId === participantId) {
           notify('Menerjemahkan...', 'info');
+          document.getElementById('vad-dot').style.background = 'var(--cyan)';
+          document.getElementById('vad-text').textContent = 'Menerjemahkan...';
         }
       }
       if (type === 'turn.completed') {
@@ -637,10 +623,13 @@
         translationCount += msg.translations?.length || 0;
         updateStats();
         updateParticipants();
-        // Reset auto-turn state for trainer mode
+        // Reset auto-turn state. Mic stays on, VAD ready again.
         if (autoTurnActive && msg.speakerId === participantId) {
           autoTurnActive = false;
         }
+        // VAD indicator back to ready
+        document.getElementById('vad-dot').style.background = 'var(--green)';
+        document.getElementById('vad-text').textContent = 'Mic aktif';
       }
       if (type === 'turn.cancelled') {
         currentSpeakerId = null;
@@ -649,11 +638,17 @@
         if (autoTurnActive && msg.speakerId === participantId) {
           autoTurnActive = false;
         }
+        // VAD indicator back to ready
+        document.getElementById('vad-dot').style.background = 'var(--green)';
+        document.getElementById('vad-text').textContent = 'Mic aktif';
       }
       if (type === 'turn.rejected') {
-        notify('Sibuk, coba lagi', 'error');
-        // Reset auto turn so VAD can try again
+        notify('Tunggu giliran — ada yang sedang bicara', 'info');
+        lastTurnRejectedAt = Date.now();
         autoTurnActive = false;
+        // Update VAD indicator to show waiting
+        document.getElementById('vad-dot').style.background = 'var(--yellow)';
+        document.getElementById('vad-text').textContent = 'Menunggu giliran';
       }
       if (type === 'room.trainerMode') {
         const enabled = msg.enabled;
@@ -708,73 +703,26 @@
     let micState = 'off';
     let pendingStop = false;
 
-    // Called once after join — attaches pointer + touch events to mic button
-    function setupMicButton() {
-      const btn = document.getElementById('btn-mic');
-      // Remove any previous listeners by cloning
-      const fresh = btn.cloneNode(true);
-      btn.parentNode.replaceChild(fresh, btn);
-      const b = document.getElementById('btn-mic');
+    // Auto-VAD: mic always-on after joining. No manual button.
+    // startMic() is called automatically on room.joined. stopMic() is only called
+    // on leave or error. Voice detection triggers turn.request, silence triggers
+    // turn.cancel.
+    let lastTurnRejectedAt = 0;
+    const TURN_REJECT_COOLDOWN_MS = 3000;
 
-      // Pointer events (desktop + some Android)
-      b.addEventListener('pointerdown', (e) => { e.preventDefault(); handleMicDown(e.target, e.pointerId); }, { passive: false });
-      b.addEventListener('pointerup',   (e) => { e.preventDefault(); handleMicUp(); }, { passive: false });
-
-      // Touch events (primary path for Android Chrome)
-      b.addEventListener('touchstart', (e) => { e.preventDefault(); handleMicDown(b, null); }, { passive: false });
-      b.addEventListener('touchend',   (e) => { e.preventDefault(); handleMicUp(); }, { passive: false });
-      b.addEventListener('touchcancel',(e) => { e.preventDefault(); handleMicUp(); }, { passive: false });
+    function startMicAuto() {
+      if (micState !== 'off') return;
+      startMic();
     }
 
-    // ALL roles use toggle: tap once = ON, tap again = OFF+send
-    // Push-to-hold was unreliable: touchend fires before getUserMedia resolves → immediate stop
-    let lastMicDownTime = 0;
-    async function handleMicDown(target, pointerId) {
-      // Debounce 300ms: pointer + touch can both fire on same tap
-      const now = Date.now();
-      if (now - lastMicDownTime < 300) return;
-      lastMicDownTime = now;
-      // Re-assert playback unlock on every mic tap (another user gesture).
-      unlockPlayback();
-      if (micState === 'starting') {
-        // Mic still acquiring — record intent to stop once it's ready
-        pendingStop = true;
-        return;
-      }
-      if (micState === 'on') stopMic();
-      else await startMic();
-    }
-
-    function handleMicUp() { /* toggle mode: no action on release */ }
-
-    async function micBtnDown(e) { e.preventDefault(); await handleMicDown(e.target, e.pointerId); }
-    function micBtnUp(e) { e.preventDefault(); }
     async function startMic() {
       if (micState !== 'off') return; // re-entry guard
       micState = 'starting';
       pendingStop = false;
 
-      // CRITICAL: send turn.request BEFORE getUserMedia so the server processes it
-      // in parallel with mic acquisition. This eliminates the ~500ms getUserMedia lag
-      // from the turn-grant pipeline. Previously turn.request was sent after getUserMedia
-      // finished, adding its latency to the first-words gap.
-      const deferToVad = myTrainerMode && myRole === 'trainer';
-      if (ws && ws.readyState === WebSocket.OPEN && !deferToVad) {
-        ws.send(JSON.stringify({ type: 'turn.request' }));
-      }
-
       try {
-        // sampleRate NOT in getUserMedia — Android Chrome throws OverconstrainedError for exact sampleRate.
-        // AudioContext({ sampleRate }) handles resampling internally.
+        // sampleRate NOT in getUserMedia — Android Chrome throws OverconstrainedError.
         micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
-        // User tapped again while acquiring — abort cleanly without going live.
-        if (pendingStop) {
-          pendingStop = false;
-          micState = 'off';
-          micStream.getTracks().forEach(t => t.stop());
-          micStream = null;
-          return;
-        }
         audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
         const source = audioCtx.createMediaStreamSource(micStream);
         scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
@@ -791,51 +739,33 @@
 
         micState = 'on';
         micOn = true;
-        document.getElementById('btn-mic').className = 'mic-btn on';
-        document.getElementById('mic-icon-off').classList.add('hidden');
-        document.getElementById('mic-icon-on').classList.remove('hidden');
         document.getElementById('mic-ready-indicator').style.display = 'block';
-
-        // If turn.granted already arrived while getUserMedia was acquiring, flush
-        // the pending audio buffer immediately so nothing is lost.
-        if (pendingAudioBuffer.length > 0 && state === STATE.LISTENING && currentSpeakerId === participantId) {
-          for (const chunk of pendingAudioBuffer) {
-            ws.send(JSON.stringify({ type: 'audio.append', audio: chunk }));
-            bufferedSamples += 4800;
-          }
-          pendingAudioBuffer = [];
-        }
+        document.getElementById('vad-dot').style.background = 'var(--green)';
+        document.getElementById('vad-text').textContent = 'Mic aktif';
+        notify('Mic aktif — bicara langsung', 'success');
       } catch (err) {
         const msg = 'Mic gagal: ' + (err.message || err.name || String(err));
         notify(msg, 'error');
-        alert(msg); // visible fallback for mobile
+        alert(msg);
         micState = 'off';
         micOn = false;
-        pendingStop = false;
         if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
       }
     }
+
     function stopMic() {
-      if (micState === 'off') return; // idempotent
+      if (micState === 'off') return;
       micState = 'off';
       micOn = false;
       if (micStream) micStream.getTracks().forEach(t => t.stop());
       if (scriptNode) { scriptNode.disconnect(); scriptNode.onaudioprocess = null; }
       if (audioCtx && audioCtx.state !== 'closed') audioCtx.close();
-      document.getElementById('btn-mic').className = 'mic-btn off';
-      document.getElementById('mic-icon-off').classList.remove('hidden');
-      document.getElementById('mic-icon-on').classList.add('hidden');
       document.getElementById('meter-bar').style.width = '0%';
       document.getElementById('mic-ready-indicator').style.display = 'none';
-
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        if (bufferedSamples > 0 && !hasAutoCommitted) {
-          ws.send(JSON.stringify({ type: 'audio.commit' }));
-        } else {
-          ws.send(JSON.stringify({ type: 'turn.cancel' }));
-        }
-      }
-      // Reset all states
+      document.getElementById('vad-dot').style.background = 'var(--red)';
+      document.getElementById('vad-text').textContent = 'Mic mati';
+      // Auto-VAD: do NOT send turn.cancel here; only auto-cancel on silence
+      // or explicit leave. The mic stopping is exceptional (error/leave).
       autoTurnActive = false;
       hasAutoCommitted = false;
       bufferedSamples = 0;
@@ -844,7 +774,8 @@
       isVoiced = false;
       pendingAudioBuffer = [];
     }
-    // Auto-VAD: for trainer mode, automatically request turn when speech detected
+
+    // Auto-VAD: automatically request turn when speech detected
     function startAutoTurn() {
       if (autoTurnActive) return;
       autoTurnActive = true;
@@ -877,8 +808,10 @@
 
       if (isFrameVoiced && !isVoiced && voicedFrames > 2) {
         isVoiced = true;
-        // Trainer mode: auto-request turn when speech starts
-        if (myTrainerMode && !autoTurnActive && myRole === 'trainer') {
+        // Auto-VAD: ALL roles trigger turn request when speech detected.
+        // Cooldown after turn.rejected prevents rapid retry loop.
+        const cooledDown = Date.now() - lastTurnRejectedAt > TURN_REJECT_COOLDOWN_MS;
+        if (!autoTurnActive && cooledDown) {
           startAutoTurn();
         }
       }
