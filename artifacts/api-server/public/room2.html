@@ -643,6 +643,18 @@
         const enabled = msg.enabled;
         notify('Trainer mode ' + (enabled ? 'aktif' : 'nonaktif'), 'info');
       }
+      if (type === 'room.participant.updated') {
+        const p = msg.participant;
+        const idx = participants.findIndex(x => x.id === p.id);
+        if (idx >= 0) participants[idx] = p;
+        else participants.push(p);
+        updateParticipants();
+        if (p.id === participantId) {
+          const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+          const modeLabel = myTrainerMode ? ' (Auto-VAD)' : '';
+          document.getElementById('my-info').textContent = `${p.name} · ${p.role === 'trainer' ? 'Trainer' : 'Peserta'}${modeLabel} · Bicara: ${langName[p.spokenLang]} · Dengar: ${langName[p.hearLang]}`;
+        }
+      }
       if (type === 'response.audio.delta') {
         // Only play audio that matches our own hearLang. Server may send audio for
         // multiple languages (translated + source) — we must ignore anything not

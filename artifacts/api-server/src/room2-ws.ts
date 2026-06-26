@@ -175,6 +175,18 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       return;
     }
 
+    if (type === "room.switchLang") {
+      const newLang = msg.spokenLang as Lang;
+      participant.spokenLang = newLang;
+      participant.hearLang = newLang;
+      broadcastToRoom2(room, {
+        type: "room.participant.updated",
+        participant: { id: participantId, name: participant.name, role: participant.role, spokenLang: newLang, hearLang: newLang, active: true },
+      });
+      logger.info({ roomCode: room.code, participantId, newLang }, "Participant switched language");
+      return;
+    }
+
     if (type === "room.leave") {
       ws.close();
       return;
