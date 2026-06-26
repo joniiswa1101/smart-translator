@@ -352,6 +352,8 @@
     let reconnectAttempts = 0;
     let reconnectTimer = null;
     let wsGeneration = 0;
+    let lastAudioTurnId = null;
+    let lastAudioText = null;
 
     let audioCtx = null;
     let micStream = null;
@@ -647,6 +649,13 @@
         if (msg.audio && (!msg.lang || !myHearLang || msg.lang === myHearLang)) {
           audioQueue.push(msg.audio);
           if (!isPlayingAudio) playAudioQueue();
+          // DEBUG: show the text of the audio being played (first chunk of each turn)
+          if (msg.turnId !== lastAudioTurnId && msg.text) {
+            lastAudioTurnId = msg.turnId;
+            lastAudioText = msg.text;
+            const ln = msg.lang === 'id' ? 'ID' : msg.lang === 'en' ? 'EN' : msg.lang === 'bn' ? 'BN' : msg.lang;
+            notify(`Audio ${ln}: ${msg.text}`, 'info');
+          }
         }
       }
       if (type === 'turn.source.transcription') {

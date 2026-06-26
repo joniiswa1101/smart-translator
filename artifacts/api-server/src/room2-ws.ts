@@ -275,6 +275,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
                 type: "response.audio.delta",
                 turnId: turn.turnId,
                 lang,
+                text,
                 audio: chunk,
               });
             }
@@ -311,6 +312,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
             type: "response.audio.delta",
             turnId: turn.turnId,
             lang: turn.sourceLang,
+            text: turn.sourceText,
             audio: base64,
           });
         }
