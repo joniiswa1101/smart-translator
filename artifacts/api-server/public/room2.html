@@ -748,6 +748,16 @@
       if (micState !== 'off') return; // re-entry guard
       micState = 'starting';
       pendingStop = false;
+
+      // CRITICAL: send turn.request BEFORE getUserMedia so the server processes it
+      // in parallel with mic acquisition. This eliminates the ~500ms getUserMedia lag
+      // from the turn-grant pipeline. Previously turn.request was sent after getUserMedia
+      // finished, adding its latency to the first-words gap.
+      const deferToVad = myTrainerMode && myRole === 'trainer';
+      if (ws && ws.readyState === WebSocket.OPEN && !deferToVad) {
+        ws.send(JSON.stringify({ type: 'turn.request' }));
+      }
+
       try {
         // sampleRate NOT in getUserMedia — Android Chrome throws OverconstrainedError for exact sampleRate.
         // AudioContext({ sampleRate }) handles resampling internally.
@@ -780,13 +790,14 @@
         document.getElementById('mic-icon-off').classList.add('hidden');
         document.getElementById('mic-icon-on').classList.remove('hidden');
 
-        // Push-to-talk: request turn immediately on mic ON.
-        // EXCEPTION: only the trainer in trainer mode defers to VAD (auto-request
-        // on speech). Peserta ALWAYS push-to-talk, even in a trainer-mode room —
-        // otherwise their mic turns on but no turn is ever requested (IDLE forever).
-        const deferToVad = myTrainerMode && myRole === 'trainer';
-        if (ws && ws.readyState === WebSocket.OPEN && !deferToVad) {
-          ws.send(JSON.stringify({ type: 'turn.request' }));
+        // If turn.granted already arrived while getUserMedia was acquiring, flush
+        // the pending audio buffer immediately so nothing is lost.
+        if (pendingAudioBuffer.length > 0 && state === STATE.LISTENING && currentSpeakerId === participantId) {
+          for (const chunk of pendingAudioBuffer) {
+            ws.send(JSON.stringify({ type: 'audio.append', audio: chunk }));
+            bufferedSamples += 4800;
+          }
+          pendingAudioBuffer = [];
         }
       } catch (err) {
         const msg = 'Mic gagal: ' + (err.message || err.name || String(err));
