@@ -177,6 +177,7 @@
     .toast.success { background: var(--green); color: #0f172a; }
     .toast.error { background: var(--red); color: #0f172a; }
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
     .hidden { display: none !important; }
   </style>
@@ -280,6 +281,10 @@
         </div>
         <div id="mic-instructions" style="margin-top:4px; font-size:0.75rem; color:var(--yellow);">
           Tap tombol mic untuk mulai merekam. Tap lagi untuk kirim.
+        </div>
+        <div id="mic-ready-indicator" style="margin-top:4px; font-size:0.8rem; color:var(--accent); display:none; font-weight:600;">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent); margin-right:6px; animation:pulse 1s infinite;"></span>
+          Mic siap! Bicara sekarang.
         </div>
       </div>
 
@@ -789,6 +794,7 @@
         document.getElementById('btn-mic').className = 'mic-btn on';
         document.getElementById('mic-icon-off').classList.add('hidden');
         document.getElementById('mic-icon-on').classList.remove('hidden');
+        document.getElementById('mic-ready-indicator').style.display = 'block';
 
         // If turn.granted already arrived while getUserMedia was acquiring, flush
         // the pending audio buffer immediately so nothing is lost.
@@ -820,6 +826,7 @@
       document.getElementById('mic-icon-off').classList.remove('hidden');
       document.getElementById('mic-icon-on').classList.add('hidden');
       document.getElementById('meter-bar').style.width = '0%';
+      document.getElementById('mic-ready-indicator').style.display = 'none';
 
       if (ws && ws.readyState === WebSocket.OPEN) {
         if (bufferedSamples > 0 && !hasAutoCommitted) {
