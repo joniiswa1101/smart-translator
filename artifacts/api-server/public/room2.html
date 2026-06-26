@@ -599,7 +599,10 @@
         notify('Trainer mode ' + (enabled ? 'aktif' : 'nonaktif'), 'info');
       }
       if (type === 'response.audio.delta') {
-        if (msg.audio) {
+        // Only play audio that matches our own hearLang. Server may send audio for
+        // multiple languages (translated + source) — we must ignore anything not
+        // meant for us to avoid hearing Bengali audio when hearLang=id.
+        if (msg.audio && (!msg.lang || !myHearLang || msg.lang === myHearLang)) {
           audioQueue.push(msg.audio);
           if (!isPlayingAudio) playAudioQueue();
         }
