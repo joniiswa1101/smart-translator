@@ -28,6 +28,16 @@ interface WsMessage {
 
 export const room2Wss = new WebSocketServer({ noServer: true });
 
+export function attachRoom2WebSocket(server: Server) {
+  server.on("upgrade", (req: IncomingMessage, socket, head) => {
+    if (req.url === "/room2-ws") {
+      room2Wss.handleUpgrade(req, socket, head, (ws) => {
+        room2Wss.emit("connection", ws, req);
+      });
+    }
+  });
+}
+
 room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   logger.info({ url: req.url }, "New client connected to room2 WebSocket");
 
@@ -58,7 +68,6 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       room = targetRoom;
       participantId = `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       participant = joinRoom2(room, participantId, name, role, spokenLang as Lang, hearLang as Lang, ws);
-      // If trainer joins with trainerMode, apply it to room state
       if (role === "trainer" && trainerMode === true) {
         room.trainerMode = true;
       }
@@ -108,7 +117,6 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
     if (type === "turn.request") {
       logger.info({ participantId, name: participant.name, role: participant.role, currentSpeaker: room.currentSpeaker, isListening: room.isListening, isProcessing: room.isProcessing }, "Turn request received");
-      // Trainer mode: if trainer requests while busy, cancel current turn and grant
       if (participant.role === "trainer" && room.trainerMode && (room.isListening || room.isProcessing || room.isPlaying)) {
         if (room.currentSpeaker && room.currentSpeaker !== participantId) {
           const current = room.participants.get(room.currentSpeaker);
@@ -198,11 +206,7 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 async function commitAudioTurn2(room: Room2, participant: Participant2) {
   const totalLen = room.audioBuffer.reduce((acc, b) => acc + b.length, 0);
   const merged = Buffer.concat(room.audioBuffer, totalLen);
-  // Empty buffer = no audio was actually captured (common on mobile when the mic
-  // race drops frames before turn.granted, or a stray commit arrives). A bare
-  // `return` here used to leave the room stuck isListening=true with this speaker
-  // forever — which permanently locks out participants, because only a trainer
-  // can steal a busy room. Cancel + reset instead so the next turn.request works.
+
   if (merged.length === 0) {
     cancelTurn2(room, participant);
     return;
@@ -211,11 +215,6 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
   room.isListening = false;
   room.isProcessing = true;
 
-  // Capture the turn this pipeline belongs to. If a trainer steals (cancel + new
-  // turn) while we await ASR/translate/TTS below, room.currentTurn changes. We must
-  // NOT finalize or reset room state for a stale turn, or we'd clobber the trainer's
-  // active turn (e.g. leave isListening=true with currentSpeaker=null — an
-  // unrecoverable stuck state). isStale() lets each async step bail out cleanly.
   const turn = room.currentTurn!;
   const isStale = () => room.currentTurn !== turn;
 
@@ -228,12 +227,12 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
   const allParticipants = Array.from(room.participants.values());
 
   try {
-    // Step 1: ASR (Speech-to-Text)
+    // STEP 1: ASR
     const asrStart = Date.now();
     const sourceText = await transcribeAudio(merged, participant.spokenLang);
-    if (isStale()) return; // turn stolen/cancelled mid-ASR — abort, don't touch room state
+    if (isStale()) return;
     turn.sourceText = sourceText;
-    logger.info({ roomCode: room.code, turnId: turn.turnId, asrMs: Date.now() - asrStart, sourceText: sourceText.slice(0, 60) }, "ASR completed");
+    logger.info({ roomCode: room.code, turnId: turn.turnId, asrMs: Date.now() - asrStart, sourceText: sourceText.slice(0, 100) }, "ASR completed");
 
     broadcastToRoom2(room, {
       type: "turn.source.transcription",
@@ -241,13 +240,13 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
       sourceText,
     });
 
-    // Step 2: Determine target languages (exclude sourceLang — no translation needed)
+    // STEP 2: Determine target languages
     const targetLangs = getAllTargetLangs(allParticipants, turn.speakerId).filter(
       (lang) => lang !== turn.sourceLang,
     );
     logger.info({ roomCode: room.code, turnId: turn.turnId, targetLangs }, "Target languages");
 
-    // Step 3: Translate to each target (parallel)
+    // STEP 3: Translate
     const translateStart = Date.now();
     const translations = await Promise.all(
       targetLangs.map(async (lang) => {
@@ -255,51 +254,50 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
         return { lang, text };
       }),
     );
-    if (isStale()) return; // turn stolen/cancelled mid-translate — abort
+    if (isStale()) return;
     logger.info({ roomCode: room.code, turnId: turn.turnId, translateMs: Date.now() - translateStart }, "Translation completed");
 
-    // Step 4: TTS for each target (parallel, non-streaming but chunked)
+    // STEP 4: TTS + immediate fan-out
     const ttsStart = Date.now();
-    const ttsPromises = translations.map(async ({ lang, text }) => {
-      const audioChunks: string[] = [];
-      const result = await ttsGenerate(
-        text,
-        lang,
-        (chunk) => {
-          audioChunks.push(chunk);
-          // Fan-out audio chunk to participants who need this language
-          for (const p of allParticipants) {
-            const neededLangs = getTargetLangsForParticipant(p, turn.speakerId);
-            if (neededLangs.includes(lang)) {
-              sendToParticipant2(p, {
-                type: "response.audio.delta",
-                turnId: turn.turnId,
-                lang,
-                text,
-                audio: chunk,
-              });
+    const ttsResults = await Promise.all(
+      translations.map(async ({ lang, text }) => {
+        const audioChunks: string[] = [];
+        const result = await ttsGenerate(
+          text,
+          lang,
+          (chunk) => {
+            audioChunks.push(chunk);
+            for (const p of allParticipants) {
+              const neededLangs = getTargetLangsForParticipant(p, turn.speakerId);
+              if (neededLangs.includes(lang)) {
+                sendToParticipant2(p, {
+                  type: "response.audio.delta",
+                  turnId: turn.turnId,
+                  lang,
+                  text,
+                  audio: chunk,
+                });
+              }
             }
-          }
-        },
-        () => { /* first byte */ },
-      );
-      return {
-        lang,
-        text,
-        audioChunks: result.audioChunks,
-        firstByteAt: result.firstByteAt,
-        firstByteLatency: result.firstByteAt ? result.firstByteAt - turn.startedAt : null,
-      };
-    });
-
-    const ttsResults = await Promise.all(ttsPromises);
-    if (isStale()) return; // turn stolen/cancelled mid-TTS — abort
+          },
+          () => {},
+        );
+        return {
+          lang,
+          text,
+          audioChunks: result.audioChunks,
+          firstByteAt: result.firstByteAt,
+          firstByteLatency: result.firstByteAt ? result.firstByteAt - turn.startedAt : null,
+        };
+      }),
+    );
+    if (isStale()) return;
     logger.info({ roomCode: room.code, turnId: turn.turnId, ttsMs: Date.now() - ttsStart }, "TTS completed");
 
-    // Step 4b: Direct source audio for participants who need sourceLang
-    const chunkSize = 24000 * 2 * 0.1; // ~100ms chunks
+    // STEP 5: source audio for same-language listeners
     const sourceAudioChunks: string[] = [];
     let sourceFirstByteAt: number | null = null;
+    const chunkSize = 24000 * 2 * 0.1;
     for (let i = 0; i < merged.length; i += chunkSize) {
       const chunk = merged.subarray(i, i + chunkSize);
       const base64 = chunk.toString("base64");
@@ -328,12 +326,12 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
         firstByteLatency: sourceFirstByteAt ? sourceFirstByteAt - turn.startedAt : null,
       });
     }
+
     turn.targets = ttsResults;
     turn.completedAt = Date.now();
     turn.totalGap = turn.completedAt - turn.startedAt;
 
-    // DIAGNOSTIC: log exactly what audio lang+text each participant receives.
-    // This is the ground truth for "I hear Bengali instead of Indonesian" reports.
+    // DIAGNOSTIC: log exactly what each participant receives
     logger.info(
       {
         roomCode: room.code,
@@ -376,7 +374,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     room.audioBuffer = [];
 
   } catch (err: any) {
-    if (isStale()) return; // pipeline failed but turn already stolen/cancelled — nothing to reset
+    if (isStale()) return;
     logger.error({ err: err.message, roomCode: room.code, turnId: turn.turnId }, "Pipeline error");
     broadcastToRoom2(room, {
       type: "pipeline.error",
@@ -407,9 +405,6 @@ function cancelTurn2(room: Room2, participant: Participant2) {
 }
 
 // ========== ASR ==========
-// gpt-4o-transcribe supports language hints for id, en, bn. Without a hint or
-// prompt the model can hallucinate wildly (e.g. Bengali transcribed as Norwegian
-// or Chinese). We always send both the hint and a strong prompt.
 async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<string> {
   const wav = pcm16ToWav(pcmBuffer, 24000);
   const form = new FormData();
@@ -458,7 +453,7 @@ Text: ${text}${glossary}`;
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
     }),
@@ -471,9 +466,7 @@ Text: ${text}${glossary}`;
   return data.choices?.[0]?.message?.content?.trim() || "";
 }
 
-// ========== TTS (Non-streaming, tts-1) ==========
-// OpenAI TTS API does not support streaming. Returns complete audio.
-// We chunk the audio and fan-out to simulate streaming.
+// ========== TTS ==========
 async function ttsGenerate(
   text: string,
   lang: Lang,
@@ -488,7 +481,7 @@ async function ttsGenerate(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "tts-1-hd",
+      model: "tts-1",
       voice: voiceMap[lang],
       input: text,
       response_format: "pcm",
@@ -503,8 +496,7 @@ async function ttsGenerate(
   const firstByteAt = Date.now();
   onFirstByte();
 
-  // Chunk audio into ~100ms chunks for fan-out
-  const chunkSize = 24000 * 2 * 0.1; // 24000 samples/sec * 2 bytes * 0.1s
+  const chunkSize = 24000 * 2 * 0.1;
   const audioChunks: string[] = [];
   for (let i = 0; i < audioBuffer.length; i += chunkSize) {
     const chunk = audioBuffer.subarray(i, i + chunkSize);
@@ -516,38 +508,31 @@ async function ttsGenerate(
   return { audioChunks, firstByteAt };
 }
 
-// ========== PCM16 to WAV ==========
-function pcm16ToWav(pcmBuffer: Buffer, sampleRate: number): Buffer {
+function pcm16ToWav(pcm: Buffer, sampleRate: number): Buffer {
   const numChannels = 1;
   const byteRate = sampleRate * numChannels * 2;
-  const dataSize = pcmBuffer.length;
-  const wavSize = 36 + dataSize;
+  const dataSize = pcm.length;
+  const headerSize = 44;
+  const wav = Buffer.alloc(headerSize + dataSize);
 
-  const wav = Buffer.alloc(44 + dataSize);
-  wav.write("RIFF", 0);
-  wav.writeUInt32LE(wavSize, 4);
-  wav.write("WAVE", 8);
-  wav.write("fmt ", 12);
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) wav[offset + i] = str.charCodeAt(i);
+  };
+
+  writeString(0, "RIFF");
+  wav.writeUInt32LE(36 + dataSize, 4);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
   wav.writeUInt32LE(16, 16);
   wav.writeUInt16LE(1, 20);
   wav.writeUInt16LE(numChannels, 22);
   wav.writeUInt32LE(sampleRate, 24);
   wav.writeUInt32LE(byteRate, 28);
-  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(numChannels * 2, 32);
   wav.writeUInt16LE(16, 34);
-  wav.write("data", 36);
+  writeString(36, "data");
   wav.writeUInt32LE(dataSize, 40);
-  pcmBuffer.copy(wav, 44);
-  return wav;
-}
+  pcm.copy(wav, 44);
 
-export function attachRoom2WebSocket(server: Server) {
-  server.on("upgrade", (req: IncomingMessage, socket, head) => {
-    if (req.url === "/room2-ws") {
-      room2Wss.handleUpgrade(req, socket, head, (ws) => {
-        room2Wss.emit("connection", ws, req);
-      });
-    }
-  });
-  logger.info("Room2 WebSocket upgrade handler attached for /room2-ws");
+  return wav;
 }
