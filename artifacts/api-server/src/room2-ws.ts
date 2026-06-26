@@ -387,33 +387,22 @@ function cancelTurn2(room: Room2, participant: Participant2) {
 }
 
 // ========== ASR ==========
-// Languages OpenAI Whisper accepts as a `language` hint. Bengali ("bn") is NOT
-// supported as a hint (API returns 400 unsupported_language). So we omit the hint
-// for unsupported langs. But auto-detect can misidentify Bengali as Chinese
-// (especially for short phrases like "kemon achen"). When spokenLang=bn we
-// force the prompt to tell the model the input is Bengali.
-const WHISPER_HINT_LANGS = new Set(["id", "en"]);
-
+// gpt-4o-transcribe supports language hints for id, en, bn. Without a hint or
+// prompt the model can hallucinate wildly (e.g. Bengali transcribed as Norwegian
+// or Chinese). We always send both the hint and a strong prompt.
 async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<string> {
   const wav = pcm16ToWav(pcmBuffer, 24000);
   const form = new FormData();
   const blob = new Blob([new Uint8Array(wav)], { type: "audio/wav" });
   form.append("file", blob, "audio.wav");
-  // gpt-4o-transcribe: newer, more accurate & multilingual than whisper-1.
   form.append("model", "gpt-4o-transcribe");
-  // Hint for known-supported langs; for bn we omit the language param but use a
-  // prompt to bias the model toward Bengali.
-  if (WHISPER_HINT_LANGS.has(spokenLang)) {
-    form.append("language", spokenLang);
-  }
-  // Prompt biases transcription for the target language. For Bengali this prevents
-  // auto-detect from drifting to Chinese.
+  form.append("language", spokenLang);
   const promptByLang: Record<string, string> = {
-    bn: "The speaker is speaking in Bengali. Transcribe exactly what you hear in Bengali script.",
+    bn: "Transcribe in Bengali script only. Do not use Chinese, English, or any other language.",
+    id: "Transcribe in Indonesian. Use standard Indonesian spelling.",
+    en: "Transcribe in English. Use standard English spelling.",
   };
-  if (promptByLang[spokenLang]) {
-    form.append("prompt", promptByLang[spokenLang]);
-  }
+  form.append("prompt", promptByLang[spokenLang] || promptByLang["en"]);
 
   const resp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
@@ -432,9 +421,15 @@ async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<s
 async function translateText(text: string, sourceLang: Lang, targetLang: Lang): Promise<string> {
   const langNames = { id: "Indonesian", en: "English", bn: "Bengali" };
   const glossary = buildGlossaryContext(sourceLang, targetLang);
-  const prompt = `Translate the following text from ${langNames[sourceLang]} to ${langNames[targetLang]}. Return the full sentence translated into ${langNames[targetLang]}. Do not transliterate. Provide only the translation, no commentary. Use the glossary terms exactly as given:
+  const prompt = `Translate the following text from ${langNames[sourceLang]} to ${langNames[targetLang]}.
 
-${text}${glossary}`;
+Rules:
+- Return ONLY the translated sentence in ${langNames[targetLang]}.
+- Do NOT transliterate. Write in natural ${langNames[targetLang]} script.
+- Keep the same meaning, tone, and level of formality.
+- Use the glossary terms exactly as given.
+
+Text: ${text}${glossary}`;
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",

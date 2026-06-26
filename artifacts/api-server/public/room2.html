@@ -379,10 +379,10 @@
     const MAX_TURN_SEC = 30000;
     const VAD_ATTACK = 0.6;
     const VAD_RELEASE = 0.2;
-    const AMPLITUDE_THRESHOLD = 0.02;
-    // ~170ms per audio frame (4096 samples @ 24kHz). 12 frames ≈ 2s of silence
-    // before auto-commit. The old value (90 ≈ 15s) meant auto-commit almost never
-    // fired, forcing users to rely on the manual tap-to-stop path.
+    // Lowered for phone mics (quieter, farther from mouth). 0.02 was too high
+    // for many Android devices; 0.008 catches normal speech at arm's length.
+    const AMPLITUDE_THRESHOLD = 0.008;
+    // ~170ms per audio frame (4096 samples @ 24kHz). 12 frames ≈ 2s of silence.
     const SILENCE_FRAMES_THRESHOLD = 12;
 
     function showScreen(id) {
