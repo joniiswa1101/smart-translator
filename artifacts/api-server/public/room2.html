@@ -348,6 +348,10 @@
     let currentTurnId = null;
     let currentSpeakerId = null;
     let translationCount = 0;
+    let userInitiatedLeave = false;
+    let reconnectAttempts = 0;
+    let reconnectTimer = null;
+    let wsGeneration = 0;
 
     let audioCtx = null;
     let micStream = null;
@@ -482,32 +486,70 @@
       const modeLabel = trainerMode ? ' (Auto-VAD)' : '';
       document.getElementById('my-info').textContent = `${name} · ${role === 'trainer' ? 'Trainer' : 'Peserta'}${modeLabel} · Bicara: ${langName[spokenLang]} · Dengar: ${langName[hearLang]}`;
 
+      userInitiatedLeave = false;
+      reconnectAttempts = 0;
+      connectWs();
+    }
+
+    // Open the WebSocket and (re)join the room. Called on first join and on
+    // every automatic reconnect after a transient mobile network drop.
+    function connectWs() {
+      // Tear down any prior socket so only one connection is ever live.
+      if (ws) {
+        try { ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null; ws.close(); } catch (e) {}
+      }
+      // Each socket gets a generation token; stale handlers (from superseded
+      // sockets during mobile churn) compare against the current generation
+      // and no-op, preventing double-joins and duplicate UI updates.
+      const myGen = ++wsGeneration;
       const wsUrl = (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + '/room2-ws';
-      ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-        ws.send(JSON.stringify({
+      const socket = new WebSocket(wsUrl);
+      ws = socket;
+      socket.onopen = () => {
+        if (myGen !== wsGeneration) { try { socket.close(); } catch (e) {} return; }
+        if (reconnectAttempts > 0) notify('Tersambung kembali', 'success');
+        reconnectAttempts = 0;
+        socket.send(JSON.stringify({
           type: 'room.join',
-          code,
-          name,
-          role,
-          spokenLang,
-          hearLang,
+          code: roomCode,
+          name: myName,
+          role: myRole,
+          spokenLang: mySpokenLang,
+          hearLang: myHearLang,
           trainerMode: myTrainerMode
         }));
       };
-      ws.onmessage = (e) => {
+      socket.onmessage = (e) => {
+        if (myGen !== wsGeneration) return;
         const msg = JSON.parse(e.data);
         handleWsMessage(msg);
       };
-      ws.onerror = () => {
-        notify('Koneksi error', 'error');
+      socket.onerror = () => {
+        // onclose fires right after; reconnect is handled there.
       };
-      ws.onclose = () => {
-        notify('Terputus dari ruang', 'error');
-        showScreen('screen-join');
+      socket.onclose = () => {
+        if (myGen !== wsGeneration) return; // superseded socket — ignore.
+        if (userInitiatedLeave) {
+          showScreen('screen-join');
+          return;
+        }
+        // Transient drop (mobile backgrounding / network blip): auto-reconnect
+        // with backoff so the listener doesn't silently miss translations.
+        if (reconnectAttempts < 10) {
+          reconnectAttempts++;
+          const delay = Math.min(1000 * reconnectAttempts, 5000);
+          notify(`Koneksi terputus, menyambung ulang (${reconnectAttempts})...`, 'error');
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connectWs, delay);
+        } else {
+          notify('Gagal menyambung ulang. Silakan join kembali.', 'error');
+          showScreen('screen-join');
+        }
       };
     }
     function leaveRoom() {
+      userInitiatedLeave = true;
+      clearTimeout(reconnectTimer);
       if (ws) {
         ws.send(JSON.stringify({ type: 'room.leave' }));
         ws.close();

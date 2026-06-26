@@ -2,3 +2,4 @@
 - [Trainer mode dual-solution pattern](trainer-mode-pattern.md) — server-side `trainerMode` override + client VAD auto-trigger for trainers, push-to-hold for participants
 - [Translator pipeline testing](testing-translator.md) — synthetic TTS can't validate ASR accuracy; test browser has no mic; async mic toggle needs a state machine.
 - [Room2 turn lockout](room2-turn-state-lockout.md) — "trainer works, peserta macet" = leaked busy-flag; only trainer can steal/recover, so every turn-exit must fully reset state + guard post-await mutations.
+- [Room2 client reconnect](room2-client-reconnect.md) — "mana terjemahannya" = client WS dropped mid-turn, not server; needs auto-reconnect+rejoin with generation-token guard; add fan-out summary log for ground truth.
