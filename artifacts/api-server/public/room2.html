@@ -380,6 +380,7 @@
     let turnTimer = null;
     let hasAutoCommitted = false;
     let pendingAudioBuffer = []; // audio captured before turn.granted arrives
+    let isLockedOut = false; // true when another speaker is active, suppresses this mic
     const MAX_TURN_SEC = 30000;
     const VAD_ATTACK = 0.6;
     const VAD_RELEASE = 0.2;
@@ -599,11 +600,18 @@
           // VAD indicator: this user is now speaking
           document.getElementById('vad-dot').style.background = 'var(--accent)';
           document.getElementById('vad-text').textContent = 'Mendengarkan...';
+          isLockedOut = false;
         } else {
           notify(`${msg.speakerName} sedang bicara...`, 'info');
           // VAD indicator: someone else is speaking
           document.getElementById('vad-dot').style.background = 'var(--yellow)';
           document.getElementById('vad-text').textContent = 'Orang lain bicara';
+          // LOCKOUT: this device's mic is locked to prevent echo pickup
+          isLockedOut = true;
+          isVoiced = false;
+          voicedFrames = 0;
+          silenceFrames = 0;
+          pendingAudioBuffer = [];
         }
         updateParticipants();
       }
@@ -630,6 +638,8 @@
         // VAD indicator back to ready
         document.getElementById('vad-dot').style.background = 'var(--green)';
         document.getElementById('vad-text').textContent = 'Mic aktif';
+        // UNLOCK: mic lockout ends when turn is completed
+        isLockedOut = false;
       }
       if (type === 'turn.cancelled') {
         currentSpeakerId = null;
@@ -641,6 +651,8 @@
         // VAD indicator back to ready
         document.getElementById('vad-dot').style.background = 'var(--green)';
         document.getElementById('vad-text').textContent = 'Mic aktif';
+        // UNLOCK: mic lockout ends when turn is done
+        isLockedOut = false;
       }
       if (type === 'turn.rejected') {
         notify('Tunggu giliran — ada yang sedang bicara', 'info');
@@ -810,8 +822,10 @@
         isVoiced = true;
         // Auto-VAD: ALL roles trigger turn request when speech detected.
         // Cooldown after turn.rejected prevents rapid retry loop.
+        // LOCKOUT: when another speaker is active, this mic is locked to prevent
+        // echo from the speaker being picked up by this device's mic.
         const cooledDown = Date.now() - lastTurnRejectedAt > TURN_REJECT_COOLDOWN_MS;
-        if (!autoTurnActive && cooledDown) {
+        if (!isLockedOut && !autoTurnActive && cooledDown) {
           startAutoTurn();
         }
       }
