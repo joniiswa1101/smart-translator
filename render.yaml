@@ -1,0 +1,33 @@
+# Render Blueprint — Smart Translator Training
+# Deploy otomatis ke Render.com dengan satu klik
+# Usage: Import repo di Render dashboard → Blueprint detected → Deploy
+
+services:
+  - type: web
+    name: smart-translator
+    runtime: docker
+    plan: standard
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: translator-db
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false # User set manual
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: BASE_PATH
+        value: "/"
+    healthCheckPath: /api/healthz
+
+databases:
+  - name: translator-db
+    plan: standard
+    databaseName: translator
+    user: translator
+    ipAllowList: []
