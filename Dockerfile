@@ -17,7 +17,9 @@ COPY lib/db/package.json ./lib/db/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY lib/api-zod/package.json ./lib/api-zod/
 
-# Install dependencies (allow esbuild native binary postinstall)
+# Install dependencies (approve esbuild postinstall for pnpm v10)
+RUN pnpm config set ignore-scripts false
+RUN pnpm approve-builds esbuild
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
@@ -28,12 +30,12 @@ COPY lib/ ./lib/
 RUN pnpm --filter @workspace/api-server run build
 
 # Production stage
-FROM node:24-alpine AS runner
+FROM node:24-slim AS runner
 WORKDIR /app
 
 # Install pnpm and PostgreSQL client (for migrations)
 RUN npm install -g pnpm
-RUN apk add --no-cache postgresql-client
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && rm -rf /var/lib/apt/lists/*
 
 # Copy built app
 COPY --from=builder /app/artifacts/api-server/dist/ ./dist/
@@ -43,6 +45,7 @@ COPY --from=builder /app/node_modules/ ./node_modules/
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/lib/ ./lib/
+COPY --from=builder /app/.npmrc ./
 
 # Environment variables (override at runtime)
 ENV NODE_ENV=production
