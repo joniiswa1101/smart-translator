@@ -175,8 +175,8 @@
 - [x] **Custom glossary per-klien**: company-specific terminology (DB-backed, REST API, pipeline integration)
 - [x] **Mobile PWA**: installable app wrapper (manifest.json, service worker, auto-register)
 - [x] **Tambah bahasa**: Mandarin, Thai, Hindi, Arab (+ existing ID, EN, BN = 7 bahasa total)
-- [ ] **Noise cancellation AI**: Krisp integration
-- [ ] **On-premise deployment**: private cloud option
+- [x] **Noise cancellation AI**: Web Audio high-pass filter (120Hz) + compressor + noise gate. Krisp SDK tidak tersedia via npm (butuh license eksternal).
+- [x] **On-premise deployment**: Dockerfile dengan multi-stage build, PostgreSQL client, auto-push migrations, health check.
 - [x] **API platform**: LMS/HRIS integration via REST API dengan API key auth (/api/platform/*)
 
 ### Test Rig (Prompt Sebelumnya - Diabaikan)

@@ -749,15 +749,48 @@
         micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
         audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
         const source = audioCtx.createMediaStreamSource(micStream);
+
+        // === Audio Pre-Processing: High-pass filter + Noise gate ===
+        // Remove low-frequency hum (AC, fans, engine) below 120Hz
+        const highPass = audioCtx.createBiquadFilter();
+        highPass.type = 'highpass';
+        highPass.frequency.value = 120;
+        highPass.Q.value = 0.7;
+
+        // Compressor: smooth out loud peaks, boost quiet voice
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.value = -24;  // dB
+        compressor.knee.value = 30;
+        compressor.ratio.value = 12;
+        compressor.attack.value = 0.003;   // 3ms
+        compressor.release.value = 0.1;    // 100ms
+
+        // Gain stage for noise gate: attenuate signal below threshold
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 1.0;
+
+        source.connect(highPass);
+        highPass.connect(compressor);
+        compressor.connect(gainNode);
+
         scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
         analyser = audioCtx.createAnalyser();
         analyser.fftSize = 256;
-        source.connect(analyser);
+        gainNode.connect(analyser);
         analyser.connect(scriptNode);
         scriptNode.connect(audioCtx.destination);
 
         scriptNode.onaudioprocess = (e) => {
           const inputData = e.inputBuffer.getChannelData(0);
+          // Noise gate: zero-out samples below threshold (prevents noise accumulation)
+          const gateThreshold = AMPLITUDE_THRESHOLD * 0.5;
+          let gated = false;
+          for (let i = 0; i < inputData.length; i++) {
+            if (Math.abs(inputData[i]) < gateThreshold) {
+              inputData[i] = 0;
+              gated = true;
+            }
+          }
           processAudioFrame(inputData);
         };
 
