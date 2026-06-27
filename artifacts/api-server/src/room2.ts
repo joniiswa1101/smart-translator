@@ -1,7 +1,7 @@
 import { WebSocket } from "ws";
 import { logger } from "./lib/logger";
 
-export type Lang = "id" | "en" | "bn";
+export type Lang = "id" | "en" | "bn" | "zh" | "th" | "hi" | "ar";
 
 export interface Participant2 {
   id: string;
@@ -45,6 +45,7 @@ export interface Room2 {
   turns: Turn2[];
   currentTurn: Turn2 | null;
   createdAt: number;
+  glossaryId?: string | null; // company/room glossary for custom terminology
 }
 
 function generateCode(): string {
@@ -87,7 +88,7 @@ export function getAllTargetLangs(allParticipants: Participant2[], speakerId: st
 
 const rooms2: Map<string, Room2> = new Map();
 
-export function createRoom2(): string {
+export function createRoom2(glossaryId?: string | null): string {
   let code = generateCode();
   while (rooms2.has(code)) {
     code = generateCode();
@@ -104,9 +105,10 @@ export function createRoom2(): string {
     turns: [],
     currentTurn: null,
     createdAt: Date.now(),
+    glossaryId: glossaryId || null,
   };
   rooms2.set(code, room);
-  logger.info({ code }, "Room2 created");
+  logger.info({ code, glossaryId }, "Room2 created");
   return code;
 }
 

@@ -1,4 +1,6 @@
 import { logger } from "./lib/logger";
+import { db, glossariesTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 
 export interface GlossaryEntry {
   term: string;
@@ -972,6 +974,28 @@ export function buildGlossaryContext(sourceLang: string, targetLang: string): st
   
   const lines = entries.map(e => `- "${e.term}" → "${e.translation}" (${e.context})`);
   return `\n\nGlossary (use these exact translations):\n${lines.slice(0, 50).join("\n")}`;
+}
+
+// Custom per-company glossary (DB-backed, overrides training glossary)
+export async function buildCustomGlossaryContext(companyId: string, sourceLang: string, targetLang: string): Promise<string> {
+  try {
+    const rows = await db
+      .select()
+      .from(glossariesTable)
+      .where(
+        and(
+          eq(glossariesTable.companyId, companyId),
+          eq(glossariesTable.sourceLang, sourceLang),
+          eq(glossariesTable.targetLang, targetLang),
+          eq(glossariesTable.active, true)
+        )
+      );
+    if (rows.length === 0) return "";
+    const lines = rows.map(r => `- "${r.term}" → "${r.translation}"${r.context ? ` (${r.context})` : ""}`);
+    return `\n\nCustom Glossary (company-specific, use these exact translations):\n${lines.slice(0, 50).join("\n")}`;
+  } catch {
+    return "";
+  }
 }
 
 // Helper to enhance transcription with glossary hints

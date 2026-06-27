@@ -4,9 +4,11 @@ import { createRoom2, getRoom2, getParticipantList2 } from "../room2";
 const router: IRouter = Router();
 
 // POST /api/room2 - Create a new room
-router.post("/room2", (_req, res) => {
-  const code = createRoom2();
-  res.json({ code });
+// Body: { glossaryId?: string } for custom company glossary
+router.post("/room2", (req, res) => {
+  const glossaryId = req.body?.glossaryId;
+  const code = createRoom2(glossaryId);
+  res.json({ code, glossaryId: glossaryId || null });
 });
 
 // GET /api/room2/:code - Get room info

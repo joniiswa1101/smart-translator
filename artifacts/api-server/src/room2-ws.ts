@@ -2,7 +2,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { Server } from "http";
 import { IncomingMessage } from "http";
 import { logger } from "./lib/logger";
-import { buildGlossaryContext } from "./glossary";
+import { buildGlossaryContext, buildCustomGlossaryContext } from "./glossary";
 import { checkLicense, recordUsage } from "./lib/license";
 import {
   getRoom2,
@@ -286,7 +286,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     const translateStart = Date.now();
     const translations = await Promise.all(
       targetLangs.map(async (lang) => {
-        const text = await translateText(sourceText, turn.sourceLang, lang);
+        const text = await translateText(sourceText, turn.sourceLang, lang, room.glossaryId);
         return { lang, text };
       }),
     );
@@ -452,6 +452,10 @@ async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<s
     bn: "Transcribe in Bengali script only. Do not use Chinese, English, or any other language.",
     id: "Transcribe in Indonesian. Use standard Indonesian spelling.",
     en: "Transcribe in English. Use standard English spelling.",
+    zh: "Transcribe in Mandarin Chinese. Use Simplified Chinese characters.",
+    th: "Transcribe in Thai. Use Thai script.",
+    hi: "Transcribe in Hindi. Use Devanagari script.",
+    ar: "Transcribe in Arabic. Use Arabic script.",
   };
   form.append("prompt", promptByLang[spokenLang] || promptByLang["en"]);
 
@@ -469,9 +473,13 @@ async function transcribeAudio(pcmBuffer: Buffer, spokenLang: string): Promise<s
 }
 
 // ========== TRANSLATE ==========
-async function translateText(text: string, sourceLang: Lang, targetLang: Lang): Promise<string> {
-  const langNames = { id: "Indonesian", en: "English", bn: "Bengali" };
-  const glossary = buildGlossaryContext(sourceLang, targetLang);
+async function translateText(text: string, sourceLang: Lang, targetLang: Lang, glossaryId?: string | null): Promise<string> {
+  const langNames = { id: "Indonesian", en: "English", bn: "Bengali", zh: "Mandarin Chinese", th: "Thai", hi: "Hindi", ar: "Arabic" };
+  let glossary = buildGlossaryContext(sourceLang, targetLang);
+  if (glossaryId) {
+    const custom = await buildCustomGlossaryContext(glossaryId, sourceLang, targetLang);
+    if (custom) glossary = custom + glossary;
+  }
   const prompt = `Translate the following text from ${langNames[sourceLang]} to ${langNames[targetLang]}.
 
 Rules:
@@ -509,7 +517,7 @@ async function ttsGenerate(
   onChunk: (chunk: string) => void,
   onFirstByte: () => void,
 ): Promise<{ audioChunks: string[]; firstByteAt: number | null }> {
-  const voiceMap: Record<Lang, string> = { id: "nova", en: "echo", bn: "alloy" };
+  const voiceMap: Record<Lang, string> = { id: "nova", en: "echo", bn: "alloy", zh: "alloy", th: "echo", hi: "fable", ar: "onyx" };
   const resp = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: {

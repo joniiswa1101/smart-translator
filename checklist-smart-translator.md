@@ -172,12 +172,12 @@
 - [x] **Wake Lock API**: prevent screen timeout saat training
 - [x] **Dashboard admin**: web dashboard untuk monitoring ruang aktif, devices, usage trend (/admin)
 - [x] **Export transcript**: CSV + JSON export
-- [ ] **Custom glossary per-klien**: company-specific terminology
+- [x] **Custom glossary per-klien**: company-specific terminology (DB-backed, REST API, pipeline integration)
 - [x] **Mobile PWA**: installable app wrapper (manifest.json, service worker, auto-register)
-- [ ] **Tambah bahasa**: Mandarin, Thai, Hindi, Arab
+- [x] **Tambah bahasa**: Mandarin, Thai, Hindi, Arab (+ existing ID, EN, BN = 7 bahasa total)
 - [ ] **Noise cancellation AI**: Krisp integration
 - [ ] **On-premise deployment**: private cloud option
-- [ ] **API platform**: untuk integrasi LMS/HRIS
+- [x] **API platform**: LMS/HRIS integration via REST API dengan API key auth (/api/platform/*)
 
 ### Test Rig (Prompt Sebelumnya - Diabaikan)
 

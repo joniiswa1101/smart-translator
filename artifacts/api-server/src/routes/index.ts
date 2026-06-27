@@ -7,6 +7,8 @@ import configRouter from "./config";
 import asrTestRouter from "./asr-test";
 import licenseRouter from "./license";
 import adminRouter from "./admin";
+import glossaryRouter from "./glossary";
+import platformRouter from "./platform";
 
 const router: IRouter = Router();
 
@@ -18,5 +20,7 @@ router.use(configRouter);
 router.use(asrTestRouter);
 router.use(licenseRouter);
 router.use(adminRouter);
+router.use(glossaryRouter);
+router.use(platformRouter);
 
 export default router;

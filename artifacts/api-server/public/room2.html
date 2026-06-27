@@ -213,6 +213,10 @@
             <option value="id">Bahasa Indonesia</option>
             <option value="en">English</option>
             <option value="bn">Bengali (বাংলা)</option>
+            <option value="zh">普通话 (Mandarin)</option>
+            <option value="th">ไทย (Thai)</option>
+            <option value="hi">हिन्दी (Hindi)</option>
+            <option value="ar">العربية (Arabic)</option>
           </select>
         </div>
         <div class="form-row">
@@ -221,6 +225,10 @@
             <option value="id">Bahasa Indonesia</option>
             <option value="en">English</option>
             <option value="bn">Bengali (বাংলা)</option>
+            <option value="zh">普通话 (Mandarin)</option>
+            <option value="th">ไทย (Thai)</option>
+            <option value="hi">हिन्दी (Hindi)</option>
+            <option value="ar">العربية (Arabic)</option>
           </select>
           <span style="font-size:0.7rem;color:var(--muted);">Setiap orang selalu mendengar dalam bahasanya sendiri.</span>
         </div>
@@ -429,7 +437,7 @@
         const isTrainer = p.role === 'trainer';
         const badgeClass = isMe ? 'me' : (isTrainer ? 'trainer' : '');
         const badgeText = isMe ? 'Saya' : (isTrainer ? 'Trainer' : 'Peserta');
-        const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+        const langName = { id: 'ID', en: 'EN', bn: 'BN', zh: 'ZH', th: 'TH', hi: 'HI', ar: 'AR' };
         const spoken = langName[p.spokenLang] || p.spokenLang;
         const hear = langName[p.hearLang] || p.hearLang;
         div.innerHTML = `
@@ -485,7 +493,7 @@
       myHearLang = hearLang;
       myName = name;
       document.getElementById('room-code-display').textContent = code;
-      const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+      const langName = { id: 'ID', en: 'EN', bn: 'BN', zh: 'ZH', th: 'TH', hi: 'HI', ar: 'AR' };
       document.getElementById('my-info').textContent = `${name} · ${role === 'trainer' ? 'Trainer' : 'Peserta'} · Bicara: ${langName[spokenLang]} · Dengar: ${langName[hearLang]}`;
 
       userInitiatedLeave = false;
@@ -674,7 +682,7 @@
         else participants.push(p);
         updateParticipants();
         if (p.id === participantId) {
-          const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+          const langName = { id: 'ID', en: 'EN', bn: 'BN', zh: 'ZH', th: 'TH', hi: 'HI', ar: 'AR' };
           document.getElementById('my-info').textContent = `${p.name} · ${p.role === 'trainer' ? 'Trainer' : 'Peserta'} · Bicara: ${langName[p.spokenLang]} · Dengar: ${langName[p.hearLang]}`;
         }
       }
@@ -689,7 +697,7 @@
           if (msg.turnId !== lastAudioTurnId && msg.text) {
             lastAudioTurnId = msg.turnId;
             lastAudioText = msg.text;
-            const ln = msg.lang === 'id' ? 'ID' : msg.lang === 'en' ? 'EN' : msg.lang === 'bn' ? 'BN' : msg.lang;
+            const ln = langName[msg.lang] || msg.lang;
             notify(`Audio ${ln}: ${msg.text}`, 'info');
           }
           // Store audio chunks for replay button
@@ -928,7 +936,7 @@
       const tbody = document.getElementById('transcript-body');
       const row = document.createElement('tr');
       const time = new Date().toLocaleTimeString('id-ID');
-      const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+      const langName = { id: 'ID', en: 'EN', bn: 'BN', zh: 'ZH', th: 'TH', hi: 'HI', ar: 'AR' };
       const srcLang = langName[turn.sourceLang] || turn.sourceLang;
       const gap = turn.totalGap ? turn.totalGap + 'ms' : '-';
       const translations = (turn.translations || []).map(t => {
@@ -1105,8 +1113,8 @@
         notify('Tidak ada data untuk export', 'error');
         return;
       }
-      const langName = { id: 'ID', en: 'EN', bn: 'BN' };
-      const headers = ['Waktu', 'Pembicara', 'Bahasa Sumber', 'Teks Sumber', 'Terjemahan ID', 'Terjemahan EN', 'Terjemahan BN', 'Gap (ms)'];
+      const langName = { id: 'ID', en: 'EN', bn: 'BN', zh: 'ZH', th: 'TH', hi: 'HI', ar: 'AR' };
+      const headers = ['Waktu', 'Pembicara', 'Bahasa Sumber', 'Teks Sumber', 'Terjemahan ID', 'Terjemahan EN', 'Terjemahan BN', 'Terjemahan ZH', 'Terjemahan TH', 'Terjemahan HI', 'Terjemahan AR', 'Gap (ms)'];
       const rows = turns.map(t => {
         const time = new Date(t.startedAt).toLocaleString('id-ID');
         const trans = {};
@@ -1119,6 +1127,10 @@
           trans['id'] || '',
           trans['en'] || '',
           trans['bn'] || '',
+          trans['zh'] || '',
+          trans['th'] || '',
+          trans['hi'] || '',
+          trans['ar'] || '',
           t.totalGap || ''
         ];
       });
