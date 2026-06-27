@@ -58,7 +58,7 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const type = msg.type;
 
     if (type === "room.join") {
-      const { code, name, role, spokenLang, hearLang, trainerMode } = msg;
+      const { code, name, role, spokenLang, hearLang } = msg;
       const targetRoom = getRoom2(code);
       if (!targetRoom) {
         ws.send(JSON.stringify({ type: "room.error", error: "Room not found" }));
@@ -68,9 +68,6 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       room = targetRoom;
       participantId = `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       participant = joinRoom2(room, participantId, name, role, spokenLang as Lang, hearLang as Lang, ws);
-      if (role === "trainer" && trainerMode === true) {
-        room.trainerMode = true;
-      }
 
       ws.send(JSON.stringify({
         type: "room.joined",
@@ -79,7 +76,6 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         role,
         spokenLang,
         hearLang,
-        trainerMode: room.trainerMode,
         participants: getParticipantList2(room),
       }));
 
@@ -117,14 +113,6 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
     if (type === "turn.request") {
       logger.info({ participantId, name: participant.name, role: participant.role, currentSpeaker: room.currentSpeaker, isListening: room.isListening, isProcessing: room.isProcessing }, "Turn request received");
-      if (participant.role === "trainer" && room.trainerMode && (room.isListening || room.isProcessing || room.isPlaying)) {
-        if (room.currentSpeaker && room.currentSpeaker !== participantId) {
-          const current = room.participants.get(room.currentSpeaker);
-          if (current) {
-            cancelTurn2(room, current);
-          }
-        }
-      }
       if (room.isListening || room.isProcessing || room.isPlaying) {
         ws.send(JSON.stringify({ type: "turn.rejected", reason: "Busy" }));
         logger.info({ participantId, name: participant.name, reason: "Busy" }, "Turn rejected");
@@ -162,15 +150,6 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     if (type === "turn.cancel") {
       if (room.currentSpeaker === participantId) {
         cancelTurn2(room, participant);
-      }
-      return;
-    }
-
-    if (type === "room.trainerMode") {
-      if (participant.role === "trainer") {
-        room.trainerMode = msg.enabled === true;
-        broadcastToRoom2(room, { type: "room.trainerMode", enabled: room.trainerMode });
-        logger.info({ roomCode: room.code, trainerMode: room.trainerMode }, "Trainer mode toggled");
       }
       return;
     }

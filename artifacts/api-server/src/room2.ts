@@ -35,7 +35,6 @@ export interface Turn2 {
 export interface Room2 {
   code: string;
   participants: Map<string, Participant2>;
-  createdAt: number;
   currentSpeaker: string | null;
   turnId: number;
   audioBuffer: Buffer[];
@@ -44,7 +43,7 @@ export interface Room2 {
   isPlaying: boolean;
   turns: Turn2[];
   currentTurn: Turn2 | null;
-  trainerMode: boolean;
+  createdAt: number;
 }
 
 function generateCode(): string {
@@ -95,7 +94,6 @@ export function createRoom2(): string {
   const room: Room2 = {
     code,
     participants: new Map(),
-    createdAt: Date.now(),
     currentSpeaker: null,
     turnId: 0,
     audioBuffer: [],
@@ -104,7 +102,7 @@ export function createRoom2(): string {
     isPlaying: false,
     turns: [],
     currentTurn: null,
-    trainerMode: false,
+    createdAt: Date.now(),
   };
   rooms2.set(code, room);
   logger.info({ code }, "Room2 created");

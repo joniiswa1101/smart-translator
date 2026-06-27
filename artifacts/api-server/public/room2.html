@@ -203,13 +203,6 @@
             <option value="participant">Peserta</option>
           </select>
         </div>
-        <div class="form-row" id="trainer-mode-row" style="display:none;">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
-            <input type="checkbox" id="join-trainer-mode" style="width:auto;" />
-            <span>Trainer Mode Auto (VAD otomatis)</span>
-          </label>
-          <span style="font-size:0.75rem; color:var(--muted);">Trainer: aktifkan mic sekali, VAD otomatis request/cancel</span>
-        </div>
         <div class="form-row">
           <label>Bahasa Bicara</label>
           <select id="join-spoken" onchange="syncHearLang()">
@@ -336,7 +329,6 @@
     let mySpokenLang = null;
     let myHearLang = null;
     let myName = null;
-    let myTrainerMode = false;
     let autoTurnActive = false;
     let participants = [];
     let turns = [];
@@ -445,19 +437,11 @@
         notify('Gagal buat ruang: ' + err.message, 'error');
       }
     }
-    function toggleTrainerModeUI() {
-      const role = document.getElementById('join-role').value;
-      const row = document.getElementById('trainer-mode-row');
-      row.style.display = role === 'trainer' ? 'flex' : 'none';
-    }
     // Sync hearLang = spokenLang secara default (bisa diubah manual)
     function syncHearLang() {
       const spoken = document.getElementById('join-spoken').value;
       document.getElementById('join-hear').value = spoken;
     }
-    // Show trainer mode checkbox on initial load (default role is trainer)
-    toggleTrainerModeUI();
-    // Sync hearLang = spokenLang on initial load too
     syncHearLang();
 
     async function joinRoom() {
@@ -467,7 +451,6 @@
       const spokenLang = document.getElementById('join-spoken').value;
       // Locked policy: everyone hears in their OWN language (Dengar = Bicara).
       const hearLang = spokenLang;
-      const trainerMode = role === 'trainer' && document.getElementById('join-trainer-mode').checked;
       if (!code || !name) {
         notify('Masukkan kode ruang dan nama', 'error');
         return;
@@ -480,11 +463,9 @@
       mySpokenLang = spokenLang;
       myHearLang = hearLang;
       myName = name;
-      myTrainerMode = trainerMode;
       document.getElementById('room-code-display').textContent = code;
       const langName = { id: 'ID', en: 'EN', bn: 'BN' };
-      const modeLabel = trainerMode ? ' (Auto-VAD)' : '';
-      document.getElementById('my-info').textContent = `${name} · ${role === 'trainer' ? 'Trainer' : 'Peserta'}${modeLabel} · Bicara: ${langName[spokenLang]} · Dengar: ${langName[hearLang]}`;
+      document.getElementById('my-info').textContent = `${name} · ${role === 'trainer' ? 'Trainer' : 'Peserta'} · Bicara: ${langName[spokenLang]} · Dengar: ${langName[hearLang]}`;
 
       userInitiatedLeave = false;
       reconnectAttempts = 0;
@@ -515,8 +496,7 @@
           name: myName,
           role: myRole,
           spokenLang: mySpokenLang,
-          hearLang: myHearLang,
-          trainerMode: myTrainerMode
+          hearLang: myHearLang
         }));
       };
       socket.onmessage = (e) => {
@@ -564,7 +544,6 @@
       if (type === 'room.joined') {
         participantId = msg.participantId;
         participants = msg.participants || [];
-        myTrainerMode = msg.trainerMode || myTrainerMode;
         updateParticipants();
         showScreen('screen-room');
         // Auto-VAD: start mic immediately after joining. No manual button needed.
@@ -661,10 +640,6 @@
         document.getElementById('vad-dot').style.background = 'var(--yellow)';
         document.getElementById('vad-text').textContent = 'Menunggu giliran';
       }
-      if (type === 'room.trainerMode') {
-        const enabled = msg.enabled;
-        notify('Trainer mode ' + (enabled ? 'aktif' : 'nonaktif'), 'info');
-      }
       if (type === 'room.participant.updated') {
         const p = msg.participant;
         const idx = participants.findIndex(x => x.id === p.id);
@@ -673,8 +648,7 @@
         updateParticipants();
         if (p.id === participantId) {
           const langName = { id: 'ID', en: 'EN', bn: 'BN' };
-          const modeLabel = myTrainerMode ? ' (Auto-VAD)' : '';
-          document.getElementById('my-info').textContent = `${p.name} · ${p.role === 'trainer' ? 'Trainer' : 'Peserta'}${modeLabel} · Bicara: ${langName[p.spokenLang]} · Dengar: ${langName[p.hearLang]}`;
+          document.getElementById('my-info').textContent = `${p.name} · ${p.role === 'trainer' ? 'Trainer' : 'Peserta'} · Bicara: ${langName[p.spokenLang]} · Dengar: ${langName[p.hearLang]}`;
         }
       }
       if (type === 'response.audio.delta') {
