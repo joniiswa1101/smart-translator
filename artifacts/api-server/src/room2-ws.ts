@@ -136,9 +136,27 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       }
 
       if (room.isListening || room.isProcessing || room.isPlaying) {
-        ws.send(JSON.stringify({ type: "turn.rejected", reason: "Busy" }));
-        logger.info({ participantId, name: participant.name, reason: "Busy" }, "Turn rejected");
-        return;
+        if (participant.role === "trainer") {
+          // Trainer steal priority: cancel current speaker's turn and take over
+          logger.info({ participantId, name: participant.name, prevSpeaker: room.currentSpeaker }, "Trainer stealing turn");
+          if (room.currentSpeaker) {
+            const prevSpeaker = room.participants.get(room.currentSpeaker);
+            if (prevSpeaker) {
+              cancelTurn2(room, prevSpeaker);
+            }
+          }
+          // Force reset in case speaker already left or state inconsistent
+          room.currentSpeaker = null;
+          room.isListening = false;
+          room.isProcessing = false;
+          room.isPlaying = false;
+          room.audioBuffer = [];
+          room.currentTurn = null;
+        } else {
+          ws.send(JSON.stringify({ type: "turn.rejected", reason: "Busy" }));
+          logger.info({ participantId, name: participant.name, reason: "Busy" }, "Turn rejected");
+          return;
+        }
       }
       room.currentSpeaker = participantId;
       room.isListening = true;

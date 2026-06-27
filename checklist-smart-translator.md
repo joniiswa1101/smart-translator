@@ -170,10 +170,10 @@
 ### Advanced Features (Roadmap)
 
 - [x] **Wake Lock API**: prevent screen timeout saat training
-- [x] **Dashboard admin**: web dashboard untuk manage rooms
+- [x] **Dashboard admin**: web dashboard untuk monitoring ruang aktif, devices, usage trend (/admin)
 - [x] **Export transcript**: CSV + JSON export
 - [ ] **Custom glossary per-klien**: company-specific terminology
-- [ ] **Mobile PWA**: installable app wrapper
+- [x] **Mobile PWA**: installable app wrapper (manifest.json, service worker, auto-register)
 - [ ] **Tambah bahasa**: Mandarin, Thai, Hindi, Arab
 - [ ] **Noise cancellation AI**: Krisp integration
 - [ ] **On-premise deployment**: private cloud option
