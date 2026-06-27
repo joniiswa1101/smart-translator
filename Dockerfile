@@ -17,7 +17,8 @@ COPY lib/db/package.json ./lib/db/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY lib/api-zod/package.json ./lib/api-zod/
 
-# Install dependencies
+# Install dependencies (allow esbuild native binary postinstall)
+RUN pnpm config set ignore-scripts false
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
