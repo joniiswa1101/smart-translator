@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Translator - Admin Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f0a1e;
+      --surface: rgba(255,255,255,0.06);
+      --surface2: rgba(255,255,255,0.10);
+      --border: rgba(255,255,255,0.12);
+      --accent: #a78bfa;
+      --accent2: #7c3aed;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --green: #4ade80;
+      --blue: #60a5fa;
+      --yellow: #facc15;
+      --red: #f87171;
+      --cyan: #22d3ee;
+      --radius: 12px;
+    }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header { margin-bottom: 28px; }
+    header h1 { font-size: 1.75rem; font-weight: 700; color: var(--accent); }
+    header p { color: var(--muted); font-size: 0.875rem; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .stat-card .label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; color: var(--accent); }
+    .stat-card.green .value { color: var(--green); }
+    .stat-card.blue .value { color: var(--blue); }
+    .stat-card.yellow .value { color: var(--yellow); }
+    .stat-card.red .value { color: var(--red); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card-title { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 16px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { text-align: left; padding: 8px; color: var(--muted); border-bottom: 1px solid var(--border); font-weight: 500; }
+    td { padding: 8px; border-bottom: 1px solid var(--border); }
+    .badge {
+      padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600;
+      background: var(--surface2); border: 1px solid var(--border);
+    }
+    .badge.green { background: rgba(74,222,128,0.15); border-color: var(--green); color: var(--green); }
+    .badge.blue { background: rgba(96,165,250,0.15); border-color: var(--blue); color: var(--blue); }
+    .badge.red { background: rgba(248,113,113,0.15); border-color: var(--red); color: var(--red); }
+
+    .refresh-btn {
+      background: var(--accent2);
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      color: white;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      margin-bottom: 16px;
+    }
+    .refresh-btn:hover { background: var(--accent); }
+
+    .empty { color: var(--muted); font-style: italic; padding: 20px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Smart Translator - Admin Dashboard</h1>
+      <p>Monitoring ruang aktif, penggunaan, dan statistik sistem</p>
+    </header>
+
+    <button class="refresh-btn" onclick="loadAll()">Refresh Data</button>
+
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="label">Ruang Aktif</div><div class="value" id="stat-rooms">-</div></div>
+      <div class="stat-card green"><div class="label">Total Peserta</div><div class="value" id="stat-participants">-</div></div>
+      <div class="stat-card blue"><div class="label">Total Devices</div><div class="value" id="stat-devices">-</div></div>
+      <div class="stat-card yellow"><div class="label">Free Devices</div><div class="value" id="stat-free">-</div></div>
+      <div class="stat-card green"><div class="label">Pro Devices</div><div class="value" id="stat-pro">-</div></div>
+      <div class="stat-card red"><div class="label">Giliran Hari Ini</div><div class="value" id="stat-turns">-</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Ruang Aktif</div>
+      <div id="rooms-container">
+        <div class="empty">Memuat...</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Usage Trend (30 Hari)</div>
+      <div id="usage-container">
+        <div class="empty">Memuat...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    async function loadAll() {
+      await Promise.all([loadStats(), loadRooms(), loadUsage()]);
+    }
+
+    async function loadStats() {
+      try {
+        const resp = await fetch('/api/admin/stats');
+        const data = await resp.json();
+        document.getElementById('stat-rooms').textContent = data.activeRooms;
+        document.getElementById('stat-participants').textContent = data.totalParticipants;
+        document.getElementById('stat-devices').textContent = data.totalDevices;
+        document.getElementById('stat-free').textContent = data.freeDevices;
+        document.getElementById('stat-pro').textContent = data.proDevices;
+        document.getElementById('stat-turns').textContent = data.turnsToday;
+      } catch (err) {
+        console.error('Stats load failed:', err);
+      }
+    }
+
+    async function loadRooms() {
+      try {
+        const resp = await fetch('/api/admin/rooms');
+        const rooms = await resp.json();
+        const container = document.getElementById('rooms-container');
+        if (rooms.length === 0) {
+          container.innerHTML = '<div class="empty">Tidak ada ruang aktif</div>';
+          return;
+        }
+        let html = '<table><thead><tr><th>Kode</th><th>Peserta</th><th>Speaker</th><th>Status</th><th>Turns</th><th>Dibuat</th></tr></thead><tbody>';
+        for (const r of rooms) {
+          const status = r.isListening ? '<span class="badge green">Listening</span>' :
+                        r.isProcessing ? '<span class="badge blue">Processing</span>' :
+                        '<span class="badge">Idle</span>';
+          const speaker = r.currentSpeaker ? r.participants.find(p => p.id === r.currentSpeaker)?.name || '?' : '-';
+          const created = new Date(r.createdAt).toLocaleTimeString('id-ID');
+          html += `<tr><td><strong>${r.code}</strong></td><td>${r.participantCount}</td><td>${speaker}</td><td>${status}</td><td>${r.turnsCount}</td><td>${created}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      } catch (err) {
+        console.error('Rooms load failed:', err);
+      }
+    }
+
+    async function loadUsage() {
+      try {
+        const resp = await fetch('/api/admin/usage');
+        const data = await resp.json();
+        const container = document.getElementById('usage-container');
+        if (!data.daily || data.daily.length === 0) {
+          container.innerHTML = '<div class="empty">Belum ada data penggunaan</div>';
+          return;
+        }
+        let html = '<table><thead><tr><th>Tanggal</th><th>Total Actions</th></tr></thead><tbody>';
+        for (const d of data.daily) {
+          html += `<tr><td>${d.day}</td><td>${d.total || 0}</td></tr>`;
+        }
+        html += '</tbody></table>';
+        if (data.byAction && data.byAction.length > 0) {
+          html += '<div style="margin-top:16px;"><strong>By Action:</strong></div><table><thead><tr><th>Action</th><th>Total</th></tr></thead><tbody>';
+          for (const a of data.byAction) {
+            html += `<tr><td>${a.action}</td><td>${a.total || 0}</td></tr>`;
+          }
+          html += '</tbody></table>';
+        }
+        container.innerHTML = html;
+      } catch (err) {
+        console.error('Usage load failed:', err);
+      }
+    }
+
+    loadAll();
+    setInterval(loadAll, 10000); // Auto-refresh every 10s
+  </script>
+</body>
+</html>

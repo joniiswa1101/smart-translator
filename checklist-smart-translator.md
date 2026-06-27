@@ -156,22 +156,22 @@
 
 ## Belum Diimplementasikan / Planned
 
-### License & Monetization (WIP)
+### License & Monetization ✅
 
-- [ ] **Device registration** dengan JWT token
-- [ ] **Free tier**: limit 5 turns/bulan atau 2 peserta per room
-- [ ] **Pro tier**: unlimited
-- [ ] **Usage counter**: per device per bulan
-- [ ] **Monthly reset**: auto reset counter tiap 30 hari
-- [ ] **Middleware enforcement**: block kalau limit tercapai
-- [ ] **Upgrade prompt**: UI sisa kuota + CTA upgrade
-- [ ] **Database schema**: deviceLicenses table (Drizzle)
+- [x] **Device registration** dengan browser fingerprint
+- [x] **Free tier**: limit 5 turns/bulan atau 2 peserta per room
+- [x] **Pro tier**: unlimited
+- [x] **Usage counter**: per device per bulan
+- [x] **Monthly reset**: auto reset counter tiap bulan (monthKey)
+- [x] **Middleware enforcement**: block di WebSocket turn.request + room.join
+- [x] **Upgrade prompt**: UI sisa kuota + CTA upgrade
+- [x] **Database schema**: devices + usage_logs tables (Drizzle)
 
 ### Advanced Features (Roadmap)
 
-- [ ] **Wake Lock API**: prevent screen timeout saat training
-- [ ] **Dashboard admin**: web dashboard untuk manage rooms
-- [ ] **Export transcript**: CSV/JSON export
+- [x] **Wake Lock API**: prevent screen timeout saat training
+- [x] **Dashboard admin**: web dashboard untuk manage rooms
+- [x] **Export transcript**: CSV + JSON export
 - [ ] **Custom glossary per-klien**: company-specific terminology
 - [ ] **Mobile PWA**: installable app wrapper
 - [ ] **Tambah bahasa**: Mandarin, Thai, Hindi, Arab

@@ -62,4 +62,8 @@ app.get("/asr-test", (_req, res) => {
   res.sendFile(path.join(publicDir, "asr-test.html"));
 });
 
+app.get("/admin", (_req, res) => {
+  res.sendFile(path.join(publicDir, "admin.html"));
+});
+
 export default app;

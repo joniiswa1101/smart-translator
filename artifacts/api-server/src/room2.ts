@@ -12,6 +12,7 @@ export interface Participant2 {
   ws: WebSocket;
   active: boolean;
   joinedAt: number;
+  deviceId: string | null;
 }
 
 export interface Turn2 {
@@ -121,6 +122,7 @@ export function joinRoom2(
   spokenLang: Lang,
   hearLang: Lang,
   ws: WebSocket,
+  deviceId?: string,
 ): Participant2 {
   const participant: Participant2 = {
     id,
@@ -131,9 +133,10 @@ export function joinRoom2(
     ws,
     active: true,
     joinedAt: Date.now(),
+    deviceId: deviceId || null,
   };
   room.participants.set(id, participant);
-  logger.info({ roomCode: room.code, participantId: id, name, role, spokenLang, hearLang }, "Participant2 joined");
+  logger.info({ roomCode: room.code, participantId: id, name, role, spokenLang, hearLang, deviceId }, "Participant2 joined");
   return participant;
 }
 
@@ -205,5 +208,9 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
+
+export function getAllRooms2(): Room2[] {
+  return Array.from(rooms2.values());
+}
 
 export { rooms2 };

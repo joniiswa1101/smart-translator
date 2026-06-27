@@ -3,6 +3,7 @@ import { Server } from "http";
 import { IncomingMessage } from "http";
 import { logger } from "./lib/logger";
 import { buildGlossaryContext } from "./glossary";
+import { checkLicense, recordUsage } from "./lib/license";
 import {
   getRoom2,
   joinRoom2,
@@ -46,7 +47,7 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   let room: Room2 | null = null;
   let participant: Participant2 | null = null;
 
-  ws.on("message", (data) => {
+  ws.on("message", async (data) => {
     let msg: WsMessage;
     try {
       const text = data instanceof Buffer ? data.toString("utf8") : data;
@@ -58,16 +59,27 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const type = msg.type;
 
     if (type === "room.join") {
-      const { code, name, role, spokenLang, hearLang } = msg;
+      const { code, name, role, spokenLang, hearLang, deviceId } = msg;
       const targetRoom = getRoom2(code);
       if (!targetRoom) {
         ws.send(JSON.stringify({ type: "room.error", error: "Room not found" }));
         return;
       }
+
+      // License check: participant count limit for free tier
+      const participantCount = targetRoom.participants.size + 1;
+      if (deviceId) {
+        const license = await checkLicense(deviceId, participantCount);
+        if (!license.allowed) {
+          ws.send(JSON.stringify({ type: "room.error", error: license.message || "License limit reached" }));
+          return;
+        }
+      }
+
       roomCode = code;
       room = targetRoom;
       participantId = `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      participant = joinRoom2(room, participantId, name, role, spokenLang as Lang, hearLang as Lang, ws);
+      participant = joinRoom2(room, participantId, name, role, spokenLang as Lang, hearLang as Lang, ws, deviceId);
 
       ws.send(JSON.stringify({
         type: "room.joined",
@@ -113,6 +125,16 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
     if (type === "turn.request") {
       logger.info({ participantId, name: participant.name, role: participant.role, currentSpeaker: room.currentSpeaker, isListening: room.isListening, isProcessing: room.isProcessing }, "Turn request received");
+
+      // License check: turn limit for free tier
+      if (participant.deviceId) {
+        const license = await checkLicense(participant.deviceId, room.participants.size);
+        if (!license.allowed) {
+          ws.send(JSON.stringify({ type: "turn.rejected", reason: "License limit", message: license.message }));
+          return;
+        }
+      }
+
       if (room.isListening || room.isProcessing || room.isPlaying) {
         ws.send(JSON.stringify({ type: "turn.rejected", reason: "Busy" }));
         logger.info({ participantId, name: participant.name, reason: "Busy" }, "Turn rejected");
@@ -122,6 +144,11 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       room.isListening = true;
       room.audioBuffer = [];
       room.turnId += 1;
+
+      // Record turn usage
+      if (participant.deviceId) {
+        await recordUsage(participant.deviceId, "turn_request", room.code);
+      }
 
       const turn: Turn2 = {
         turnId: room.turnId,

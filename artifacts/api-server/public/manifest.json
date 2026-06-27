@@ -1,0 +1,28 @@
+{
+  "name": "Smart Translator Training",
+  "short_name": "Translator",
+  "description": "Real-time multi-language speech translator for training sessions",
+  "start_url": "/room2",
+  "display": "standalone",
+  "background_color": "#0f0a1e",
+  "theme_color": "#7c3aed",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect fill='%237c3aed' width='192' height='192' rx='36'/%3E%3Ctext x='96' y='120' font-size='100' text-anchor='middle' fill='white'%3E🗣️%3C/text%3E%3C/svg%3E",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect fill='%237c3aed' width='512' height='512' rx='96'/%3E%3Ctext x='256' y='320' font-size='280' text-anchor='middle' fill='white'%3E🗣️%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "scope": "/",
+  "categories": ["productivity", "education"],
+  "lang": "id",
+  "dir": "ltr"
+}

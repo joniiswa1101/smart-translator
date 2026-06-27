@@ -2,7 +2,11 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#7c3aed" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="/manifest.json" />
   <title>Smart Translator B: Multi-output</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -271,6 +275,17 @@
         </div>
       </div>
 
+      <div class="card" id="license-card" style="display:none;">
+        <div class="card-title">Langganan</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+          <div>
+            <div id="license-tier" style="font-size:0.9rem; font-weight:600; color:var(--accent);">Free</div>
+            <div id="license-quota" style="font-size:0.8rem; color:var(--muted); margin-top:4px;">0/5 giliran</div>
+          </div>
+          <button id="btn-upgrade" onclick="showUpgrade()" style="padding:8px 16px; font-size:0.85rem;">Upgrade Pro</button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-title">Statistik Sesi</div>
         <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px;">
@@ -293,6 +308,7 @@
         </div>
         <div style="display:flex; gap:8px;">
           <button class="secondary" onclick="exportMetrics()">Export JSON</button>
+          <button class="secondary" onclick="exportCSV()">Export CSV</button>
           <button class="secondary" onclick="clearMetrics()">Reset</button>
         </div>
       </div>
@@ -329,6 +345,7 @@
     let mySpokenLang = null;
     let myHearLang = null;
     let myName = null;
+    let myDeviceId = null;
     let autoTurnActive = false;
     let participants = [];
     let turns = [];
@@ -455,6 +472,10 @@
         notify('Masukkan kode ruang dan nama', 'error');
         return;
       }
+      // Generate deviceId if not set
+      if (!myDeviceId) {
+        myDeviceId = generateDeviceId();
+      }
       // Unlock audio playback now — this runs inside the join button gesture,
       // so the playback context starts in a "running" state on mobile.
       unlockPlayback();
@@ -496,7 +517,8 @@
           name: myName,
           role: myRole,
           spokenLang: mySpokenLang,
-          hearLang: myHearLang
+          hearLang: myHearLang,
+          deviceId: myDeviceId
         }));
       };
       socket.onmessage = (e) => {
@@ -535,6 +557,7 @@
         ws.close();
       }
       stopMic();
+      releaseWakeLock();
       showScreen('screen-join');
     }
 
@@ -548,6 +571,10 @@
         showScreen('screen-room');
         // Auto-VAD: start mic immediately after joining. No manual button needed.
         startMicAuto();
+        // Wake Lock: prevent screen timeout during training
+        requestWakeLock();
+        // Fetch license info
+        fetchLicenseInfo();
         notify(`Bergabung sebagai ${myName}`, 'success');
       }
       if (type === 'room.participant.joined') {
@@ -675,6 +702,10 @@
       }
       if (type === 'room.error') {
         notify('Error: ' + msg.error, 'error');
+        // If license error, redirect back to join screen
+        if (msg.error && (msg.error.includes('License') || msg.error.includes('limit') || msg.error.includes('Free tier'))) {
+          setTimeout(() => showScreen('screen-join'), 2000);
+        }
       }
       if (type === 'pipeline.error') {
         notify('Pipeline error: ' + msg.error, 'error');
@@ -991,6 +1022,133 @@
       URL.revokeObjectURL(url);
       notify('Exported!', 'success');
     }
+
+    function generateDeviceId() {
+      // Simple fingerprint from browser + random
+      const fingerprint = [
+        navigator.userAgent,
+        navigator.language,
+        screen.width + 'x' + screen.height,
+        navigator.hardwareConcurrency
+      ].join('|');
+      const hash = fingerprint.split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0).toString(36);
+      return 'dev_' + hash + '_' + Math.random().toString(36).slice(2, 8);
+    }
+
+    // Wake Lock: prevent screen timeout during training
+    let wakeLock = null;
+    async function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => {
+            console.log('Wake Lock released');
+          });
+          console.log('Wake Lock active');
+        } catch (err) {
+          console.log('Wake Lock failed:', err);
+        }
+      }
+    }
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release();
+        wakeLock = null;
+      }
+    }
+    // Re-acquire wake lock when page becomes visible again
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && micOn) {
+        requestWakeLock();
+      }
+    });
+
+    // License info fetch
+    async function fetchLicenseInfo() {
+      if (!myDeviceId) return;
+      try {
+        const resp = await fetch(`/api/license?deviceId=${encodeURIComponent(myDeviceId)}&participants=${participants.length || 1}`);
+        const data = await resp.json();
+        if (data) {
+          const card = document.getElementById('license-card');
+          const tier = document.getElementById('license-tier');
+          const quota = document.getElementById('license-quota');
+          const btn = document.getElementById('btn-upgrade');
+          card.style.display = 'block';
+          tier.textContent = data.tier === 'pro' ? 'Pro' : 'Free';
+          tier.style.color = data.tier === 'pro' ? 'var(--green)' : 'var(--accent)';
+          if (data.tier === 'pro') {
+            quota.textContent = 'Unlimited';
+            btn.style.display = 'none';
+          } else {
+            quota.textContent = `${data.turnsUsed || 0}/${data.turnsLimit} giliran bulan ini`;
+            btn.style.display = 'inline-block';
+          }
+        }
+      } catch (err) {
+        console.log('License fetch failed:', err);
+      }
+    }
+
+    // Show upgrade modal
+    function showUpgrade() {
+      const msg = `Upgrade ke Pro untuk unlimited giliran dan peserta.`;
+      if (confirm(msg + '\n\nHubungi admin untuk aktivasi Pro.')) {
+        // In production, this would redirect to Stripe/payment page
+        notify('Silakan hubungi admin untuk upgrade Pro', 'info');
+      }
+    }
+
+    // CSV Export
+    function exportCSV() {
+      if (turns.length === 0) {
+        notify('Tidak ada data untuk export', 'error');
+        return;
+      }
+      const langName = { id: 'ID', en: 'EN', bn: 'BN' };
+      const headers = ['Waktu', 'Pembicara', 'Bahasa Sumber', 'Teks Sumber', 'Terjemahan ID', 'Terjemahan EN', 'Terjemahan BN', 'Gap (ms)'];
+      const rows = turns.map(t => {
+        const time = new Date(t.startedAt).toLocaleString('id-ID');
+        const trans = {};
+        (t.translations || []).forEach(tr => trans[tr.lang] = tr.text);
+        return [
+          time,
+          t.speakerName,
+          langName[t.sourceLang] || t.sourceLang,
+          t.sourceText || '',
+          trans['id'] || '',
+          trans['en'] || '',
+          trans['bn'] || '',
+          t.totalGap || ''
+        ];
+      });
+      const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `translator-b-session-${roomCode}-${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      notify('CSV exported!', 'success');
+    }
+
+    // Register Service Worker for PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('SW registered:', reg.scope))
+        .catch(err => console.log('SW failed:', err));
+    }
+
+    // Prevent double-tap zoom on mobile
+    let lastTouchEnd = 0;
+    document.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) {
+        e.preventDefault();
+      }
+      lastTouchEnd = now;
+    }, false);
 
     showScreen('screen-join');
   </script>

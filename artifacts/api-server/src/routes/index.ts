@@ -5,6 +5,8 @@ import roomRouter from "./room";
 import room2Router from "./room2";
 import configRouter from "./config";
 import asrTestRouter from "./asr-test";
+import licenseRouter from "./license";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -14,5 +16,7 @@ router.use(roomRouter);
 router.use(room2Router);
 router.use(configRouter);
 router.use(asrTestRouter);
+router.use(licenseRouter);
+router.use(adminRouter);
 
 export default router;
