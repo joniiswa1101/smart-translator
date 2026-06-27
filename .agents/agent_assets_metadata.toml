@@ -12,3 +12,9 @@ id = "ZAlwE3g0neZ96i8w2Zkrl"
 uri = "file://blueprint-smart-translator.md"
 type = "text"
 title = "Blueprint & Fitur Detail - Smart Translator B (Multi-output)"
+
+[[outputs]]
+id = "1LLbJHkAXyhusZtOyPXQp"
+uri = "file://checklist-smart-translator.md"
+type = "text"
+title = "Implementation Checklist - Smart Translator Training"
