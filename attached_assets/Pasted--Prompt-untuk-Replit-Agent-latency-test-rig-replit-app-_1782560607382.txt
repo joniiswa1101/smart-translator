@@ -1,0 +1,148 @@
+# Prompt untuk Replit Agent — latency-test-rig.replit.app
+
+## Konteks Proyek
+
+Ini adalah aplikasi **test harness terpisah** dari aplikasi produksi "Smart Translator Training". Tujuannya BUKAN untuk dipakai trainee langsung — ini tools internal untuk menguji secara empiris mana dari 3 model pengiriman hasil terjemahan (streaming penuh / chunked near-real-time / full batch) yang paling robust untuk sesi rekaman audio panjang (1-3 jam) di kondisi jaringan nyata, termasuk jaringan korporat dengan proxy/firewall.
+
+Hasil pengujian di app ini akan menentukan model mana yang dipakai di aplikasi produksi. Jadi prioritas utama bukan UI cantik — prioritasnya adalah **akurasi metrik yang dicatat** dan **resilience layer yang benar-benar teruji**, karena tanpa resilience layer yang solid, hasil perbandingan ketiga model jadi tidak valid (kegagalan bisa disebabkan resilience layer yang lemah, bukan model itu sendiri).
+
+---
+
+## Langkah 0 — Inspeksi Dulu, Jangan Asumsi
+
+Sebelum mulai coding:
+1. Cek apakah project Replit ini sudah ada boilerplate/kode sebelumnya. Kalau kosong, laporkan ke saya stack yang Anda rencanakan pakai (rekomendasi: React + TypeScript + Vite untuk frontend PWA, Node.js/Express untuk backend, PostgreSQL via Drizzle ORM untuk database — tapi konfirmasi dulu sebelum scaffold).
+2. Kalau project ini ternyata sudah ada kode (misal di-clone dari project Smart Translator Training yang sudah ada), laporkan struktur file yang ditemukan dan komponen apa yang sudah bisa di-reuse, sebelum menulis kode baru.
+3. Tampilkan temuan ini ke saya dulu sebelum lanjut implementasi.
+
+---
+
+## Langkah 1 — Core Resilience Layer (wajib jadi fondasi sebelum model apa pun diuji)
+
+Ini harus berjalan SAMA untuk ketiga model di Langkah 2 — supaya perbandingan antar model adil (apples-to-apples), kegagalan yang muncul nanti benar-benar berasal dari karakteristik model, bukan dari resilience layer yang berbeda-beda.
+
+### 1.1 Wake Lock
+- Implementasikan `navigator.wakeLock.request('screen')` otomatis saat sesi recording dimulai.
+- Pasang listener `release` event pada wake lock sentinel → re-acquire otomatis kalau ter-release saat sesi masih berjalan (misal tab sempat blur sebentar lalu kembali fokus).
+- Kalau browser tidak mendukung Wake Lock API, tampilkan warning jelas di UI: "Browser ini tidak mendukung Wake Lock — pastikan screen timeout device dimatikan manual sebelum mulai sesi."
+
+### 1.2 Chunked Recording & Upload
+- Gunakan `MediaRecorder` dengan `timeslice` (default 30 detik, jadikan konfigurasi yang mudah diubah untuk eksperimen).
+- Di `ondataavailable`, kirim setiap chunk via `POST /api/session/:sessionId/chunk` dengan `chunkIndex` urut dan `timestamp`.
+- **Sebelum** chunk terkonfirmasi sukses oleh server, simpan dulu ke IndexedDB lokal (object store `pendingChunks`, key: `${sessionId}-${chunkIndex}`).
+- Setelah server balas 200 + konfirmasi chunk index tercatat, hapus entry itu dari IndexedDB.
+- Retry otomatis dengan exponential backoff (mis. 1s, 2s, 4s, 8s, maks 5x retry) kalau upload gagal karena network error. Kalau retry exhausted, tetap simpan di IndexedDB dan coba lagi di heartbeat cycle berikutnya — jangan buang data.
+
+### 1.3 Resume dari Checkpoint
+- Server menyimpan `lastConfirmedChunkIndex` per `sessionId` di database.
+- `sessionId` disimpan di `localStorage` (bukan cuma in-memory), supaya kalau tab reload/crash, saat re-init app bisa:
+  1. Deteksi ada `sessionId` aktif yang belum ditutup di localStorage.
+  2. Fetch `lastConfirmedChunkIndex` dari server.
+  3. Cocokkan dengan isi IndexedDB lokal (chunk mana yang belum terkonfirmasi).
+  4. Kirim ulang chunk yang belum terkonfirmasi, lalu lanjutkan recording dari titik itu — BUKAN mulai sesi baru dari nol.
+
+### 1.4 Heartbeat & Status Indicator
+- Kirim heartbeat ping ke server tiap 10-15 detik selama sesi aktif (`POST /api/session/:sessionId/heartbeat`).
+- UI menampilkan status real-time dengan 3 state jelas:
+  - `LIVE` (hijau) — semua normal.
+  - `RECONNECTING` (kuning) — sedang retry upload/koneksi.
+  - `BUFFERING_LOCAL` (oranye) — data tersimpan di IndexedDB, menunggu koneksi pulih.
+- **Setiap transisi state dicatat dengan timestamp** ke tabel `sessionEvents` (kolom: `sessionId`, `eventType`, `timestamp`, `metadata` JSON). Ini krusial — ini bahan analisis utama setelah dry-run untuk tahu kapan dan berapa lama drop terjadi.
+
+### 1.5 Segmented Session Mode (opsional, untuk perbandingan)
+- Tambahkan konfigurasi panjang segmen (default 25 menit) yang mewajibkan klik "Lanjut" eksplisit dari user di antar segmen.
+- Buat ini bisa di-toggle ON/OFF per test run, supaya test rig bisa membandingkan hasil mode tersegmentasi vs mode nonstop penuh untuk model yang sama.
+
+---
+
+## Langkah 2 — Menu Testing 3 Model (fitur utama latency-test-rig)
+
+Buat route khusus `/test-rig`, terpisah dari (kalaupun ada) UI training biasa. Lindungi dengan simple gate (password env var atau flag `isTestMode`) — ini tools internal, bukan untuk trainee.
+
+Di halaman ini, tester pilih salah satu dari 3 model sebelum sesi dimulai:
+
+### Model 1 — True Streaming
+- Buka koneksi **WebSocket persisten** ke server begitu sesi dimulai.
+- Kirim audio dalam chunk sangat kecil (1-2 detik) lewat socket yang sama secara kontinu.
+- Server forward ke ASR/translation provider dalam mode streaming, kirim balik hasil parsial (partial transcript/translation) secepat tersedia.
+- Catat: setiap kali socket disconnect & reconnect, catat sebagai event terpisah.
+
+### Model 2 — Chunked Near-Real-Time
+- Implementasikan Voice Activity Detection (VAD) sederhana di client — gunakan library seperti `@ricky0123/vad-web`, atau deteksi silence threshold manual dari `AnalyserNode` Web Audio API.
+- Setiap kali terdeteksi jeda diam (default 1.5-2 detik, jadikan konfigurasi), potong audio jadi satu utterance, kirim sebagai **HTTP POST independen** ke endpoint transcribe+translate.
+- Tampilkan hasil begitu response balik. Request gagal di-retry independen, tidak mempengaruhi utterance lain.
+
+### Model 3 — Full Batch
+- Rekam seluruh sesi penuh (pakai resilience layer Langkah 1 sepenuhnya).
+- Setelah sesi ditutup (manual stop atau auto setelah durasi tertentu), kirim untuk diproses — boleh sekaligus atau bertahap per-chunk di background.
+- Tampilkan hasil lengkap di halaman ringkasan setelah semua proses selesai.
+
+### Metrik yang HARUS dicatat otomatis untuk setiap model (tabel `testRunMetrics`)
+| Metrik | Keterangan |
+|---|---|
+| `latencyMs` per response | Waktu dari akhir audio diucapkan → hasil translasi muncul di UI |
+| `disconnectCount` | Khusus Model 1 — berapa kali WebSocket putus selama sesi |
+| `retryCount` | Khusus Model 2 — berapa kali request gagal & di-retry |
+| `totalSessionDurationAchieved` | Total durasi sesi yang berhasil diselesaikan tanpa kehilangan data |
+| `dataLossCount` | Jumlah chunk/utterance yang gagal terkirim permanen (exhausted retry) |
+| `reconnectLatencyMs` | Rata-rata waktu pulih dari disconnect ke reconnect lagi |
+
+### Dashboard Komparasi
+- Setelah test run selesai, tampilkan halaman ringkasan otomatis: tabel komparasi metrik di atas (kalau sudah ada >1 test run tersimpan, tampilkan berdampingan untuk dibandingkan).
+- Kalau memungkinkan, tampilkan grafik timeline status (`LIVE`/`RECONNECTING`/`BUFFERING_LOCAL`) sepanjang durasi sesi sebagai visual sederhana (bar horizontal dengan warna per state berdasarkan `sessionEvents`).
+
+---
+
+## Langkah 3 — Export untuk Analisis Manual
+- Semua data di `testRunMetrics` dan `sessionEvents` harus bisa di-export ke CSV/JSON per `sessionId`, supaya bisa dianalisis lebih lanjut di Excel/Sheets kalau diperlukan.
+
+---
+
+## Langkah 4 — Integrasi Google Meet / Zoom (via Recall.ai Meeting Bot API)
+
+**Keputusan mekanisme: Recall.ai Meeting Bot API.** Alasan: satu API mencakup Zoom + Google Meet (tidak perlu integrasi terpisah per platform), biaya $0.50/jam recording (PAYG, tanpa platform fee — untuk sesi 1-3 jam berarti $0.50-$1.50/sesi), sudah menyediakan real-time audio/transcript streaming yang relevan untuk Model 1 di Langkah 2, dan bot berjalan di infrastruktur Recall.ai sendiri sehingga tidak membebani resource device trainee yang sudah berat menjalankan Wake Lock + recording 3 jam.
+
+### 4.0 Verifikasi WAJIB sebelum mulai coding (jangan skip)
+1. Cek ke IT/admin Google Workspace & Zoom Rajawali Group apakah ada policy yang men-block third-party bot di level tenant/admin. Tren 2026 menunjukkan makin banyak organisasi mengetatkan ini — kalau di-block di level admin, integrasi tidak akan jalan terlepas seberapa benar kodenya.
+2. Cek dokumentasi resmi Recall.ai apakah ada opsi **Desktop Recording SDK** yang compatible dengan stack web/PWA kita (bukan cuma native/Electron) — ini alternatif yang capture audio langsung dari device trainee sendiri (karena trainee sudah jadi peserta meeting), tanpa bot terpisah join sebagai participant asing. Kalau compatible dengan PWA, ini berpotensi UX lebih mulus untuk skenario kita (trainee sudah di meeting, bukan bot tamu yang invite manual). Laporkan temuan ini ke saya sebelum pilih Bot API vs Desktop SDK final.
+3. Daftar akun Recall.ai (ada free trial credit untuk testing tanpa komitmen biaya dulu).
+
+### 4.1 Setup
+- Generate API key dari dashboard Recall.ai, simpan sebagai env var `RECALL_API_KEY`.
+- Endpoint utama untuk deploy bot ke meeting: `POST https://api.recall.ai/api/v1/bot/` dengan parameter meeting URL (Zoom atau Google Meet link).
+- Catatan: bot akan otomatis memicu consent notification bawaan platform (Zoom: dialog consent yang tidak bisa di-skip via SDK; Google Meet: notifikasi merah). Ini wajar dan harus dibiarkan tampil — untuk konteks training internal yang sudah consented, ini bukan masalah, jangan coba cari cara menyembunyikannya.
+
+### 4.2 Real-time audio routing
+- Gunakan webhook/streaming endpoint Recall.ai untuk forward audio secara real-time ke backend kita.
+- Audio yang masuk dari Recall HARUS diperlakukan sama seperti audio dari mic lokal di Langkah 1 — masuk ke pipeline chunking yang sama dan bisa dipilih salah satu dari 3 model di Langkah 2, supaya perbandingan model tetap konsisten terlepas dari sumber audio (mic lokal vs meeting).
+
+### 4.3 Lifecycle Management
+- Endpoint untuk deploy bot (mulai sesi) dan endpoint leave/stop bot (akhir sesi).
+- Webhook listener untuk status bot (`joining`, `in_call`, `recording`, `done`, `error`) — log semua transisi ke tabel `sessionEvents` yang sama seperti heartbeat lokal di Langkah 1.4, supaya satu dashboard bisa menampilkan status gabungan (device lokal + bot meeting).
+
+### 4.4 Testing sebelum dipakai sesi training sungguhan
+- Test dengan 1 meeting Zoom dummy dan 1 meeting Google Meet dummy terpisah dulu.
+- Ukur latency tambahan akibat audio harus lewat infrastruktur Recall.ai (extra hop) dibanding sumber mic lokal — pastikan ini tidak mengganggu signifikan terutama untuk Model 1 (true streaming) yang paling sensitif terhadap latency.
+- Verifikasi bot bisa di-stop/leave dengan bersih tanpa meninggalkan sesi "zombie" yang terus charge biaya recording.
+
+---
+
+## Langkah 5 — Testing yang Harus Dilakukan Setelah Implementasi
+
+Untuk **SETIAP** dari 3 model, jalankan bertahap:
+1. Smoke test 15-30 menit — cek komponen dasar jalan (recording, upload, hasil translasi muncul).
+2. Test 60-90 menit — khusus di jaringan korporat (proxy/firewall), banyak timeout policy umumnya muncul di rentang ini.
+3. Full 3 jam, minimal 2x di hari berbeda — satu kali saja rawan jadi false positive.
+4. **Fault injection**: sengaja matikan WiFi/koneksi selama 30 detik di sekitar menit ke-60, verifikasi resume/reconnect logic benar-benar jalan otomatis seperti dirancang — jangan hanya asumsikan itu bekerja karena belum pernah gagal.
+5. Monitor resource device (DevTools Memory/Performance tab) selama sesi — cek apakah JS heap naik terus tanpa turun (indikasi memory leak), terutama untuk Model 1 (koneksi panjang) dan Model 3 (buffer besar di memori).
+
+---
+
+## Output yang Saya Butuhkan dari Anda Setelah Implementasi
+
+1. Daftar file yang dibuat/diubah.
+2. Skema database final (nama tabel, kolom, tipe data).
+3. Environment variable apa saja yang perlu saya isi di Replit Secrets (API key ASR/translation provider, dll), beri nama variable-nya.
+4. Hasil smoke test awal (pass/fail) untuk tiap komponen resilience layer (Wake Lock, chunked upload, resume-from-checkpoint, heartbeat).
+5. Konfirmasi: apakah ketiga model (1/2/3) sudah bisa dipilih dan dijalankan independen dari menu `/test-rig`, dan metrik tercatat dengan benar untuk masing-masing.
+6. Hasil verifikasi Langkah 4.0: apakah ada policy admin yang block third-party bot di Workspace/Zoom Rajawali Group, dan apakah Recall.ai Desktop Recording SDK compatible dengan stack PWA kita — laporkan ini SEBELUM lanjut implementasi penuh Langkah 4, supaya saya bisa konfirmasi tetap pakai Bot API atau pindah ke Desktop SDK.
