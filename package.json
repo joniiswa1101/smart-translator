@@ -19,7 +19,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
     "@types/ws": "^8.18.1",
-    "esbuild": "0.27.3",
+    "esbuild": "0.27.7",
     "esbuild-plugin-pino": "^2.3.3",
     "express": "^5.2.1",
     "typescript": "^6.0.3",
