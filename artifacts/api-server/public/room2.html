@@ -818,7 +818,7 @@
       if (isFrameVoiced) { voicedFrames++; silenceFrames = 0; }
       else silenceFrames++;
 
-      if (isFrameVoiced && !isVoiced && voicedFrames > 2) {
+      if (isFrameVoiced && !isVoiced && voicedFrames > 8) {
         isVoiced = true;
         // Auto-VAD: ALL roles trigger turn request when speech detected.
         // Cooldown after turn.rejected prevents rapid retry loop.
@@ -828,6 +828,12 @@
         if (!isLockedOut && !autoTurnActive && cooledDown) {
           startAutoTurn();
         }
+      }
+      // FALSE-POSITIVE FILTER: if voice was detected (voicedFrames > 0) but never reached
+      // the threshold (8 frames), and silence continues, reset the voiced counter so
+      // transient noise doesn't accumulate into a future false trigger.
+      if (!isFrameVoiced && !isVoiced && voicedFrames > 0 && silenceFrames > 5) {
+        voicedFrames = 0;
       }
       if (!isFrameVoiced && isVoiced && silenceFrames > SILENCE_FRAMES_THRESHOLD) {
         isVoiced = false;
