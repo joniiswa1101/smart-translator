@@ -1,0 +1,41 @@
+#8 [builder  1/13] FROM docker.io/library/node:24@sha256:fdddfb3e688158251943d52eba361de991548f6814007acba4917ae6b512d6be
+#8 extracting sha256:dab84c23da78c9ca7947b4662a2cdc2e2959aace090842658746f8ae973b62c5 0.0s done
+#8 extracting sha256:96c4ced53c5179808f741af3c1207cfdc26cb58e3c7807f7f001c8a1b57c6fc6 done
+#8 DONE 17.9s
+#13 [builder  2/13] WORKDIR /app
+#13 DONE 0.0s
+#14 [builder  3/13] RUN npm install -g pnpm
+#14 1.930 
+#14 1.930 added 1 package in 2s
+#14 1.930 
+#14 1.930 1 package is looking for funding
+#14 1.930   run `npm fund` for details
+#14 1.933 npm notice
+#14 1.933 npm notice New minor version of npm available! 11.16.0 -> 11.17.0
+#14 1.933 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+#14 1.933 npm notice To update run: npm install -g npm@11.17.0
+#14 1.933 npm notice
+#14 DONE 2.1s
+#15 [builder  4/13] COPY package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json ./
+#15 DONE 0.1s
+#16 [builder  5/13] COPY pnpm-lock.yaml ./
+#16 DONE 0.0s
+#17 [builder  6/13] COPY artifacts/api-server/package.json ./artifacts/api-server/
+#17 DONE 0.0s
+#18 [builder  7/13] COPY lib/db/package.json ./lib/db/
+#18 DONE 0.0s
+#19 [builder  8/13] COPY lib/api-client-react/package.json ./lib/api-client-react/
+#19 DONE 0.0s
+#20 [builder  9/13] COPY lib/api-zod/package.json ./lib/api-zod/
+#20 DONE 0.0s
+#21 [builder 10/13] RUN pnpm install --frozen-lockfile
+#21 1.197 Scope: all 5 workspace projects
+#21 1.357 ? Verifying lockfile against supply-chain policies (514 entries)...
+#21 1.372 Lockfile is up to date, resolution step is skipped
+#21 1.579 Progress: resolved 1, reused 0, downloaded 0, added 0
+#21 1.662 Packages: +167
+#21 1.662 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#21 2.879 Progress: resolved 167, reused 0, downloaded 0, added 0
+#21 3.881 Progress: resolved 167, reused 0, downloaded 160, added 68
+#21 4.896 Progress: resolved 167, reused 0, downloaded 167, added 166
+#21 5.008 Progress: resolved 167, reused 0, downloaded 167, added 167, done
