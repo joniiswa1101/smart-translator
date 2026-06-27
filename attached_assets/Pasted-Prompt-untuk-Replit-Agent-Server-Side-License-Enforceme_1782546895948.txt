@@ -1,0 +1,57 @@
+Prompt untuk Replit Agent — Server-Side License Enforcement (Voca/Notura)
+Implementasikan server-side paywall enforcement untuk Free dan Pro tier di backend Voca (artifacts/api-server/). Saat ini trial.ts hanya melaporkan status license tapi TIDAK mem-blokir akses ke endpoint premium di notura.ts — ini harus diperbaiki.
+Langkah 0 — Inspeksi dulu, jangan asumsi
+Sebelum mengubah apapun:
+Baca skema tabel noturaTrialDevices di Drizzle schema (cari file di db/schema.ts atau sejenisnya). Laporkan kolom yang sudah ada.
+Baca isi artifacts/api-server/src/routes/trial.ts saat ini — apa fungsinya sekarang.
+List semua endpoint di artifacts/api-server/src/routes/notura.ts yang seharusnya premium-gated (transcribe, transcribe-from-storage, summarize, translate, dll).
+Tampilkan temuan ini ke saya sebelum lanjut ke implementasi, supaya saya bisa konfirmasi sebelum kode berubah.
+Langkah 1 — Tambah kolom yang diperlukan ke noturaTrialDevices (kalau belum ada)
+tier: enum 'free' | 'pro'
+meetingsThisMonth: integer, default 0
+cloudMinutesUsedThisMonth: integer/float, default 0
+cycleStartDate: timestamp, default now()
+deviceToken: string (JWT signed token, unique, untuk verifikasi device — lihat Langkah 3)
+Buat migration Drizzle untuk kolom baru ini. Jangan drop data existing.
+Langkah 2 — Buat middleware enforceLicense
+File baru: artifacts/api-server/src/middleware/enforceLicense.ts
+Logic:
+Ambil deviceToken dari header Authorization: Bearer <token> (bukan header custom mentah seperti x-device-id — harus signed JWT, lihat Langkah 3).
+Verify JWT signature. Kalau invalid/expired → 401.
+Decode deviceId dari token, query row noturaTrialDevices.
+Kalau device tidak ditemukan → 403.
+Cek apakah cycleStartDate sudah lewat 30 hari dari sekarang:
+Kalau ya: reset meetingsThisMonth = 0, cloudMinutesUsedThisMonth = 0, cycleStartDate = now().
+Kalau tier === 'free':
+Kalau meetingsThisMonth >= 5 → 402 { error: 'free_tier_limit', upgrade: true }
+Kalau durasi recording yang diminta (dari req.body.durationSeconds) > 1800 detik → 402 { error: 'free_tier_duration_cap', upgrade: true }
+Kalau tier === 'pro':
+Kalau cloudMinutesUsedThisMonth >= FAIR_USE_CAP_MINUTES (definisikan konstanta, default 600 menit/bulan, boleh disesuaikan) → 429 { error: 'fair_use_limit' }
+Lolos semua cek → attach req.deviceId dan req.deviceTier, lanjut next().
+Langkah 3 — Device authentication dengan JWT (CRITICAL — jangan skip)
+Header device id mentah BISA dipalsukan oleh client. Harus pakai signed token:
+Saat device pertama kali register (cari atau buat endpoint registrasi device, kemungkinan sudah ada di trial.ts), server generate JWT yang isinya { deviceId }, signed dengan secret dari environment variable (JWT_SECRET — cek apakah sudah ada di Replit Secrets, kalau belum, buat dan beri tahu saya nama variable-nya).
+Token ini dikirim balik ke client, client simpan di secure storage (Expo SecureStore), dan dikirim di setiap request sebagai Authorization: Bearer <token>.
+Token TIDAK boleh expired terlalu cepat (set expiry panjang, misal 1 tahun, karena ini bukan auth session — ini device identity), tapi harus bisa di-revoke kalau device di-reset/uninstall (opsional: tambah kolom tokenRevoked boolean untuk kill switch manual).
+Langkah 4 — Pasang middleware di endpoint premium
+Di notura.ts, tambahkan enforceLicense sebagai middleware sebelum handler di SEMUA endpoint yang menggunakan transcription/AI cloud:
+Typescript
+Langkah 5 — Increment counter SETELAH sukses, bukan sebelum
+Di akhir setiap handler (setelah transcription berhasil, bukan di awal), tambahkan:
+Typescript
+Alasan counter di-increment setelah sukses (bukan sebelum): kalau request gagal (network error, file korup, dll), user tidak kehilangan kuota mereka.
+Langkah 6 — Update trial.ts
+Pastikan endpoint status di trial.ts (yang dipakai client untuk menampilkan sisa kuota di UI) membaca dari kolom yang sama (meetingsThisMonth, cloudMinutesUsedThisMonth, cycleStartDate) supaya angka yang ditampilkan ke user selalu konsisten dengan yang di-enforce backend.
+Langkah 7 — Testing
+Test device baru dengan tier free: lakukan 5 request transcribe berhasil, request ke-6 harus dapat 402.
+Test device free dengan durasi recording 35 menit: harus dapat 402 duration cap, BUKAN diproses dulu baru gagal.
+Test device dengan token JWT invalid/tidak ada: harus 401.
+Test reset bulanan: manipulasi cycleStartDate ke 31 hari lalu di database, lalu request — counter harus reset ke 0 otomatis.
+Test device pro melebihi fair-use cap: harus 429.
+Output yang saya butuhkan dari kamu
+Setelah implementasi selesai, beri saya:
+Daftar file yang diubah/dibuat
+Nama environment variable JWT secret yang harus saya isi di Replit Secrets (kalau belum ada)
+Hasil dari 5 test case di Langkah 7 (pass/fail masing-masing)
+Endpoint registrasi device mana yang sekarang bertanggung jawab generate JWT token (supaya saya bisa cek client-side sudah kirim token dengan benar)
+Jangan ubah logic transcription/upload yang sudah jalan (useRecorder.ts, cloud-gemini.ts, object storage routing) — fokus murni ke enforcement layer ini saja.
