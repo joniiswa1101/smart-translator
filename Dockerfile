@@ -3,7 +3,7 @@
 #   docker build -t smart-translator .
 #   docker run -e DATABASE_URL=postgresql://... -e OPENAI_API_KEY=sk-... -p 3000:3000 smart-translator
 
-FROM node:24-alpine AS builder
+FROM node:24 AS builder
 WORKDIR /app
 
 # Install pnpm
@@ -18,7 +18,6 @@ COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY lib/api-zod/package.json ./lib/api-zod/
 
 # Install dependencies (allow esbuild native binary postinstall)
-RUN pnpm config set ignore-scripts false
 RUN pnpm install --frozen-lockfile
 
 # Copy source code
