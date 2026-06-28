@@ -17,8 +17,8 @@ COPY lib/db/package.json ./lib/db/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY lib/api-zod/package.json ./lib/api-zod/
 
-# Install dependencies (pnpm v9 allows all postinstall scripts)
-RUN pnpm install --frozen-lockfile
+# Install dependencies (pnpm v9 regenerate lockfile from v10 format)
+RUN pnpm install --no-frozen-lockfile
 
 # Copy source code
 COPY artifacts/api-server/ ./artifacts/api-server/

@@ -1,0 +1,50 @@
+2026-06-28T01:06:49.628086846Z #14 2.517 npm notice New minor version of npm available! 11.16.0 -> 11.17.0
+2026-06-28T01:06:49.628092076Z #14 2.517 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.17.0
+2026-06-28T01:06:49.628098616Z #14 2.517 npm notice To update run: npm install -g npm@11.17.0
+2026-06-28T01:06:49.628105116Z #14 2.517 npm notice
+2026-06-28T01:06:49.781299261Z #14 DONE 2.8s
+2026-06-28T01:06:49.893782242Z 
+2026-06-28T01:06:49.893815273Z #15 [builder  4/13] COPY package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json .npmrc ./
+2026-06-28T01:06:49.893822463Z #15 DONE 0.1s
+2026-06-28T01:06:49.893827363Z 
+2026-06-28T01:06:49.893832953Z #16 [builder  5/13] COPY pnpm-lock.yaml ./
+2026-06-28T01:06:49.893838523Z #16 DONE 0.0s
+2026-06-28T01:06:49.893843323Z 
+2026-06-28T01:06:49.893848893Z #17 [builder  6/13] COPY artifacts/api-server/package.json ./artifacts/api-server/
+2026-06-28T01:06:49.893853983Z #17 DONE 0.0s
+2026-06-28T01:06:49.893858643Z 
+2026-06-28T01:06:49.893863784Z #18 [builder  7/13] COPY lib/db/package.json ./lib/db/
+2026-06-28T01:06:49.893881694Z #18 DONE 0.0s
+2026-06-28T01:06:49.893884824Z 
+2026-06-28T01:06:49.893888144Z #19 [builder  8/13] COPY lib/api-client-react/package.json ./lib/api-client-react/
+2026-06-28T01:06:49.893891164Z #19 DONE 0.0s
+2026-06-28T01:06:49.893893934Z 
+2026-06-28T01:06:49.893896914Z #20 [builder  9/13] COPY lib/api-zod/package.json ./lib/api-zod/
+2026-06-28T01:06:49.893899914Z #20 DONE 0.0s
+2026-06-28T01:06:50.045624556Z 
+2026-06-28T01:06:50.045665547Z #21 [builder 10/13] RUN pnpm install --frozen-lockfile
+2026-06-28T01:06:50.784254354Z #21 0.889 Scope: all 5 workspace projects
+2026-06-28T01:06:50.895183671Z #21 1.000  ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+2026-06-28T01:06:50.895221152Z #21 1.000 
+2026-06-28T01:06:50.895225552Z #21 1.000 Update your lockfile using "pnpm install --no-frozen-lockfile"
+2026-06-28T01:06:51.039536248Z #21 ERROR: process "/bin/sh -c pnpm install --frozen-lockfile" did not complete successfully: exit code: 1
+2026-06-28T01:06:51.053209731Z ------
+2026-06-28T01:06:51.053254962Z  > importing cache manifest
+2026-06-28T01:06:51.053265972Z ------
+2026-06-28T01:06:51.053272232Z ------
+2026-06-28T01:06:51.053278682Z  > [builder 10/13] RUN pnpm install --frozen-lockfile:
+2026-06-28T01:06:51.053285133Z 0.889 Scope: all 5 workspace projects
+2026-06-28T01:06:51.053291453Z 1.000  ERR_PNPM_LOCKFILE_CONFIG_MISMATCH  Cannot proceed with the frozen installation. The current "overrides" configuration doesn't match the value found in the lockfile
+2026-06-28T01:06:51.053297603Z 1.000 
+2026-06-28T01:06:51.053304143Z 1.000 Update your lockfile using "pnpm install --no-frozen-lockfile"
+2026-06-28T01:06:51.053309853Z ------
+2026-06-28T01:06:51.0543991Z Dockerfile:21
+2026-06-28T01:06:51.05443049Z --------------------
+2026-06-28T01:06:51.05443627Z   19 |     
+2026-06-28T01:06:51.054442051Z   20 |     # Install dependencies (pnpm v9 allows all postinstall scripts)
+2026-06-28T01:06:51.054448221Z   21 | >>> RUN pnpm install --frozen-lockfile
+2026-06-28T01:06:51.054454451Z   22 |     
+2026-06-28T01:06:51.054461121Z   23 |     # Copy source code
+2026-06-28T01:06:51.054466001Z --------------------
+2026-06-28T01:06:51.054471731Z error: failed to solve: process "/bin/sh -c pnpm install --frozen-lockfile" did not complete successfully: exit code: 1
+2026-06-28T01:06:51.083126707Z error: exit status 1
