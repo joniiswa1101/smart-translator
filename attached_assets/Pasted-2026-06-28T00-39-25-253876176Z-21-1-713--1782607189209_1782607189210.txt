@@ -1,0 +1,50 @@
+2026-06-28T00:39:25.253876176Z #21 1.713 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-06-28T00:39:26.356952776Z #21 2.816 Progress: resolved 167, reused 0, downloaded 0, added 0
+2026-06-28T00:39:27.36052896Z #21 3.820 Progress: resolved 167, reused 0, downloaded 159, added 42
+2026-06-28T00:39:28.375932372Z #21 4.835 Progress: resolved 167, reused 0, downloaded 167, added 166
+2026-06-28T00:39:28.609870164Z #21 4.919 Progress: resolved 167, reused 0, downloaded 167, added 167, done
+2026-06-28T00:39:30.705961681Z #21 7.166 ✓ Lockfile passes supply-chain policies (514 entries in 5.8s)
+2026-06-28T00:39:30.953379302Z #21 7.250 
+2026-06-28T00:39:30.953408023Z #21 7.250 dependencies:
+2026-06-28T00:39:30.953414883Z #21 7.250 + dotenv 16.6.1
+2026-06-28T00:39:30.953420873Z #21 7.250 + openai 4.104.0
+2026-06-28T00:39:30.953426363Z #21 7.250 
+2026-06-28T00:39:30.953432073Z #21 7.250 devDependencies:
+2026-06-28T00:39:30.953438203Z #21 7.250 + @types/express 5.0.6
+2026-06-28T00:39:30.953444033Z #21 7.250 + @types/node 25.6.2
+2026-06-28T00:39:30.953449834Z #21 7.250 + @types/ws 8.18.1
+2026-06-28T00:39:30.953455694Z #21 7.250 + esbuild 0.28.1
+2026-06-28T00:39:30.953461974Z #21 7.250 + esbuild-plugin-pino 2.3.3
+2026-06-28T00:39:30.953467714Z #21 7.250 + express 5.2.1
+2026-06-28T00:39:30.953473094Z #21 7.250 + typescript 6.0.3
+2026-06-28T00:39:30.953478584Z #21 7.250 + ws 8.21.0
+2026-06-28T00:39:30.953484564Z #21 7.250 
+2026-06-28T00:39:31.024286628Z #21 7.484 [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: esbuild@0.28.1
+2026-06-28T00:39:31.02437474Z #21 7.484 
+2026-06-28T00:39:31.02438091Z #21 7.484 Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+2026-06-28T00:39:31.597153014Z #21 ERROR: process "/bin/sh -c pnpm install --frozen-lockfile" did not complete successfully: exit code: 1
+2026-06-28T00:39:31.611365492Z ------
+2026-06-28T00:39:31.611388953Z  > importing cache manifest
+2026-06-28T00:39:31.611392433Z ------
+2026-06-28T00:39:31.611395683Z ------
+2026-06-28T00:39:31.611399523Z  > [builder 10/13] RUN pnpm install --frozen-lockfile:
+2026-06-28T00:39:31.611402923Z 7.250 + @types/ws 8.18.1
+2026-06-28T00:39:31.611405983Z 7.250 + esbuild 0.28.1
+2026-06-28T00:39:31.611409433Z 7.250 + esbuild-plugin-pino 2.3.3
+2026-06-28T00:39:31.611412483Z 7.250 + express 5.2.1
+2026-06-28T00:39:31.611415383Z 7.250 + typescript 6.0.3
+2026-06-28T00:39:31.611418324Z 7.250 + ws 8.21.0
+2026-06-28T00:39:31.611421274Z 7.250 
+2026-06-28T00:39:31.611424654Z 7.484 [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: esbuild@0.28.1
+2026-06-28T00:39:31.611427634Z 7.484 
+2026-06-28T00:39:31.611431174Z 7.484 Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+2026-06-28T00:39:31.611434074Z ------
+2026-06-28T00:39:31.612799188Z Dockerfile:21
+2026-06-28T00:39:31.612838369Z --------------------
+2026-06-28T00:39:31.612843659Z   19 |     
+2026-06-28T00:39:31.612847239Z   20 |     # Install dependencies (approve esbuild postinstall for pnpm v10)
+2026-06-28T00:39:31.61285067Z   21 | >>> RUN pnpm install --frozen-lockfile
+2026-06-28T00:39:31.61285393Z   22 |     
+2026-06-28T00:39:31.61285719Z   23 |     # Copy source code
+2026-06-28T00:39:31.61286046Z --------------------
+2026-06-28T00:39:31.61286404Z error: failed to solve: process "/bin/sh -c pnpm install --frozen-lockfile" did not complete successfully: exit code: 1

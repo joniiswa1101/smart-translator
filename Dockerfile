@@ -17,8 +17,8 @@ COPY lib/db/package.json ./lib/db/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY lib/api-zod/package.json ./lib/api-zod/
 
-# Install dependencies (approve esbuild postinstall for pnpm v10)
-RUN pnpm install --frozen-lockfile
+# Install dependencies (regenerate lockfile to store builtDependencies metadata)
+RUN pnpm install
 
 # Copy source code
 COPY artifacts/api-server/ ./artifacts/api-server/
