@@ -406,6 +406,14 @@
     // ~170ms per audio frame (4096 samples @ 24kHz). 12 frames ≈ 2s of silence.
     const SILENCE_FRAMES_THRESHOLD = 12;
 
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
     function showScreen(id) {
       document.querySelectorAll('[id^="screen-"]').forEach(el => el.classList.add('hidden'));
       document.getElementById(id).classList.remove('hidden');
@@ -438,12 +446,12 @@
         const badgeClass = isMe ? 'me' : (isTrainer ? 'trainer' : '');
         const badgeText = isMe ? 'Saya' : (isTrainer ? 'Trainer' : 'Peserta');
         const langName = { id: 'ID', en: 'EN', bn: 'BN', zh: 'ZH', th: 'TH', hi: 'HI', ar: 'AR' };
-        const spoken = langName[p.spokenLang] || p.spokenLang;
-        const hear = langName[p.hearLang] || p.hearLang;
+        const spoken = esc(langName[p.spokenLang] || p.spokenLang);
+        const hear = esc(langName[p.hearLang] || p.hearLang);
         div.innerHTML = `
-          <div class="avatar">${p.name.charAt(0).toUpperCase()}</div>
+          <div class="avatar">${esc(p.name.charAt(0).toUpperCase())}</div>
           <div class="info">
-            <div class="name">${p.name} ${isMe ? '(Anda)' : ''}</div>
+            <div class="name">${esc(p.name)} ${isMe ? '(Anda)' : ''}</div>
             <div class="role">${p.role === 'trainer' ? 'Trainer' : 'Peserta'} · Bicara: ${spoken} · Dengar: ${hear}</div>
           </div>
           <div class="badge ${badgeClass} ${isSpeaking ? 'speaking' : ''}">${isSpeaking ? 'MENGAKU' : badgeText}</div>
@@ -974,18 +982,19 @@
       const gap = turn.totalGap ? turn.totalGap + 'ms' : '-';
       const translations = (turn.translations || []).map(t => {
         const l = langName[t.lang] || t.lang;
-        return `<div class="translation-pill"><span class="lang">${l}</span> <span class="text">${t.text}</span></div>`;
+        return `<div class="translation-pill"><span class="lang">${esc(l)}</span> <span class="text">${esc(t.text)}</span></div>`;
       }).join('');
-      const hasAudio = turnAudioChunks[turn.turnId] && turnAudioChunks[turn.turnId].length > 0;
-      const playBtn = hasAudio ? `<button class="secondary" style="font-size:0.7rem;padding:2px 6px;margin-top:4px;" onclick="playTurnAudio(${turn.turnId})">▶ Mainkan</button>` : '';
+      const safeId = parseInt(turn.turnId, 10);
+      const hasAudio = turnAudioChunks[safeId] && turnAudioChunks[safeId].length > 0;
+      const playBtn = hasAudio ? `<button class="secondary" style="font-size:0.7rem;padding:2px 6px;margin-top:4px;" onclick="playTurnAudio(${safeId})">▶ Mainkan</button>` : '';
       row.innerHTML = `
-        <td class="time">${time}</td>
-        <td class="speaker">${turn.speakerName}</td>
-        <td class="source"><span class="lang-tag">${srcLang}</span> ${turn.sourceText || '...'}</td>
+        <td class="time">${esc(time)}</td>
+        <td class="speaker">${esc(turn.speakerName)}</td>
+        <td class="source"><span class="lang-tag">${esc(srcLang)}</span> ${esc(turn.sourceText || '...')}</td>
         <td class="translation">${translations}${playBtn}</td>
-        <td class="time">${gap}</td>
+        <td class="time">${esc(gap)}</td>
       `;
-      row.dataset.turnId = turn.turnId;
+      row.dataset.turnId = safeId;
       tbody.insertBefore(row, tbody.firstChild);
       updateStats();
     }

@@ -50,6 +50,12 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
     if (type === "room.join") {
       const { code, name, role, lang, trainerMode } = msg;
+      const VALID_LANGS: ReadonlySet<string> = new Set(["id", "en", "bn"]);
+      const VALID_ROLES: ReadonlySet<string> = new Set(["trainer", "peserta"]);
+      if (!VALID_LANGS.has(lang) || !VALID_ROLES.has(role)) {
+        ws.send(JSON.stringify({ type: "room.error", error: "Invalid lang or role" }));
+        return;
+      }
       const targetRoom = getRoom(code);
       if (!targetRoom) {
         ws.send(JSON.stringify({ type: "room.error", error: "Room not found" }));

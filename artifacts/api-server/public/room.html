@@ -402,6 +402,14 @@
     const SILENCE_FRAMES_THRESHOLD = 90; // ~1.5s @ 170ms/frame
 
     // ==================== UI HELPERS ====================
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
     function showScreen(id) {
       document.querySelectorAll('[id^="screen-"]').forEach(el => el.classList.add('hidden'));
       document.getElementById(id).classList.remove('hidden');
@@ -433,11 +441,11 @@
         const isTrainer = p.role === 'trainer';
         const badgeClass = isMe ? 'me' : (isTrainer ? 'trainer' : '');
         const badgeText = isMe ? 'Saya' : (isTrainer ? 'Trainer' : 'Peserta');
-        const langName = { id: 'ID', en: 'EN', bn: 'BN' }[p.lang] || p.lang;
+        const langName = esc({ id: 'ID', en: 'EN', bn: 'BN' }[p.lang] || p.lang);
         div.innerHTML = `
-          <div class="avatar">${p.name.charAt(0).toUpperCase()}</div>
+          <div class="avatar">${esc(p.name.charAt(0).toUpperCase())}</div>
           <div class="info">
-            <div class="name">${p.name} ${isMe ? '(Anda)' : ''}</div>
+            <div class="name">${esc(p.name)} ${isMe ? '(Anda)' : ''}</div>
             <div class="role">${p.role === 'trainer' ? 'Trainer' : 'Peserta'} · ${langName}</div>
           </div>
           <div class="badge ${badgeClass} ${isSpeaking ? 'speaking' : ''}">${isSpeaking ? 'MENGAKU' : badgeText}</div>
@@ -858,11 +866,11 @@
       const tgtLang = langName[turn.targetLang] || turn.targetLang;
       const latency = turn.firstByteLatency ? turn.firstByteLatency + 'ms' : '-';
       row.innerHTML = `
-        <td class="time">${time}</td>
-        <td class="speaker">${turn.speakerName}</td>
-        <td class="source"><span class="lang-tag">${srcLang}</span> ${turn.sourceText || '...'}</td>
-        <td class="translation"><span class="lang-tag">${tgtLang}</span> ${turn.translationText || '...'}</td>
-        <td class="time">${latency}</td>
+        <td class="time">${esc(time)}</td>
+        <td class="speaker">${esc(turn.speakerName)}</td>
+        <td class="source"><span class="lang-tag">${esc(srcLang)}</span> ${esc(turn.sourceText || '...')}</td>
+        <td class="translation"><span class="lang-tag">${esc(tgtLang)}</span> ${esc(turn.translationText || '...')}</td>
+        <td class="time">${esc(latency)}</td>
       `;
       tbody.insertBefore(row, tbody.firstChild);
       updateStats();
