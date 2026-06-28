@@ -6,8 +6,8 @@
 FROM node:24 AS builder
 WORKDIR /app
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm v9 (does NOT have onlyBuiltDependencies restriction)
+RUN npm install -g pnpm@9.15.9
 
 # Copy workspace files
 COPY package.json pnpm-workspace.yaml tsconfig.json tsconfig.base.json .npmrc ./
@@ -17,8 +17,8 @@ COPY lib/db/package.json ./lib/db/
 COPY lib/api-client-react/package.json ./lib/api-client-react/
 COPY lib/api-zod/package.json ./lib/api-zod/
 
-# Install dependencies (regenerate lockfile to store builtDependencies metadata)
-RUN pnpm install
+# Install dependencies (pnpm v9 allows all postinstall scripts)
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY artifacts/api-server/ ./artifacts/api-server/
@@ -31,8 +31,10 @@ RUN pnpm --filter @workspace/api-server run build
 FROM node:24-slim AS runner
 WORKDIR /app
 
-# Install pnpm and PostgreSQL client (for migrations)
-RUN npm install -g pnpm
+# Install pnpm v9
+RUN npm install -g pnpm@9.15.9
+
+# Install PostgreSQL client (for migrations)
 RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client && rm -rf /var/lib/apt/lists/*
 
 # Copy built app

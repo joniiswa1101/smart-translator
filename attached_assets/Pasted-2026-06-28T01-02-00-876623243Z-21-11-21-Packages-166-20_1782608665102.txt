@@ -1,0 +1,50 @@
+2026-06-28T01:02:00.876623243Z #21 11.21 Packages: +166
+2026-06-28T01:02:00.876650503Z #21 11.21 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-06-28T01:02:00.950834144Z #21 11.43 Progress: resolved 167, reused 0, downloaded 166, added 145
+2026-06-28T01:02:01.191235456Z #21 11.52 Progress: resolved 167, reused 0, downloaded 166, added 166, done
+2026-06-28T01:02:01.361836868Z #21 11.84 [WARN] Issues with peer dependencies found. Run "pnpm peers check" to list them.
+2026-06-28T01:02:01.487172151Z #21 11.84 
+2026-06-28T01:02:01.487205381Z #21 11.84 dependencies:
+2026-06-28T01:02:01.487209501Z #21 11.84 + dotenv 16.6.1 (17.4.2 is available)
+2026-06-28T01:02:01.487212961Z #21 11.84 + openai 4.104.0 (6.45.0 is available)
+2026-06-28T01:02:01.487215981Z #21 11.84 
+2026-06-28T01:02:01.487219941Z #21 11.84 devDependencies:
+2026-06-28T01:02:01.487222942Z #21 11.84 + @types/express 5.0.6
+2026-06-28T01:02:01.487226792Z #21 11.84 + @types/node 25.6.2 (26.0.1 is available)
+2026-06-28T01:02:01.487229762Z #21 11.84 + @types/ws 8.18.1
+2026-06-28T01:02:01.487232672Z #21 11.84 + esbuild 0.28.1
+2026-06-28T01:02:01.487235592Z #21 11.84 + esbuild-plugin-pino 2.3.3
+2026-06-28T01:02:01.487238912Z #21 11.84 + express 5.2.1
+2026-06-28T01:02:01.487242312Z #21 11.84 + typescript 6.0.3
+2026-06-28T01:02:01.487245302Z #21 11.84 + ws 8.21.0
+2026-06-28T01:02:01.487248332Z #21 11.84 
+2026-06-28T01:02:01.487251952Z #21 11.97 [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: esbuild@0.28.1
+2026-06-28T01:02:01.487274622Z #21 11.97 
+2026-06-28T01:02:01.487278302Z #21 11.97 Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+2026-06-28T01:02:02.14647494Z #21 ERROR: process "/bin/sh -c pnpm install" did not complete successfully: exit code: 1
+2026-06-28T01:02:02.160376245Z ------
+2026-06-28T01:02:02.160404346Z  > importing cache manifest
+2026-06-28T01:02:02.160411686Z ------
+2026-06-28T01:02:02.160418286Z ------
+2026-06-28T01:02:02.160424306Z  > [builder 10/13] RUN pnpm install:
+2026-06-28T01:02:02.160429796Z 11.84 + @types/ws 8.18.1
+2026-06-28T01:02:02.160434636Z 11.84 + esbuild 0.28.1
+2026-06-28T01:02:02.160439876Z 11.84 + esbuild-plugin-pino 2.3.3
+2026-06-28T01:02:02.160445576Z 11.84 + express 5.2.1
+2026-06-28T01:02:02.160450556Z 11.84 + typescript 6.0.3
+2026-06-28T01:02:02.160455366Z 11.84 + ws 8.21.0
+2026-06-28T01:02:02.160460356Z 11.84 
+2026-06-28T01:02:02.160465656Z 11.97 [ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: esbuild@0.28.1
+2026-06-28T01:02:02.160470506Z 11.97 
+2026-06-28T01:02:02.160475886Z 11.97 Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+2026-06-28T01:02:02.160480696Z ------
+2026-06-28T01:02:02.161519446Z Dockerfile:21
+2026-06-28T01:02:02.161696377Z --------------------
+2026-06-28T01:02:02.161705127Z   19 |     
+2026-06-28T01:02:02.161710927Z   20 |     # Install dependencies (regenerate lockfile to store builtDependencies metadata)
+2026-06-28T01:02:02.161716377Z   21 | >>> RUN pnpm install
+2026-06-28T01:02:02.161721387Z   22 |     
+2026-06-28T01:02:02.161727228Z   23 |     # Copy source code
+2026-06-28T01:02:02.161732858Z --------------------
+2026-06-28T01:02:02.161738468Z error: failed to solve: process "/bin/sh -c pnpm install" did not complete successfully: exit code: 1
+2026-06-28T01:02:02.19521753Z error: exit status 1
