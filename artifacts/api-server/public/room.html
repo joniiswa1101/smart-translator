@@ -226,7 +226,7 @@
       <div class="join-form">
         <div class="form-row">
           <label>Kode Ruang</label>
-          <input id="join-code" type="text" placeholder="TR42" maxlength="10" />
+          <input id="join-code" type="text" placeholder="Kode 8 karakter" maxlength="12" />
         </div>
         <div class="form-row">
           <label>Nama Anda</label>
@@ -234,10 +234,14 @@
         </div>
         <div class="form-row">
           <label>Peran</label>
-          <select id="join-role">
-            <option value="trainer">Trainer</option>
+          <select id="join-role" onchange="toggleTrainerTokenUI()">
             <option value="participant">Peserta</option>
+            <option value="trainer">Trainer</option>
           </select>
+        </div>
+        <div class="form-row" id="trainer-token-row" style="display:none;">
+          <label>Token Trainer <span style="font-size:0.7rem;color:var(--muted);">(diberikan saat buat ruang)</span></label>
+          <input id="join-trainer-token" type="text" placeholder="Token rahasia trainer" maxlength="64" autocomplete="off" />
         </div>
         <div class="form-row">
           <label>Bahasa Bicara</label>
@@ -370,6 +374,7 @@
     let myLang = null;
     let myName = null;
     let myTrainerMode = false;
+    let myTrainerToken = null;
     let participants = [];
     let turns = [];
     let currentTurnId = null;
@@ -455,12 +460,21 @@
     }
 
     // ==================== ROOM ACTIONS ====================
+    function toggleTrainerTokenUI() {
+      const role = document.getElementById('join-role').value;
+      document.getElementById('trainer-token-row').style.display = role === 'trainer' ? '' : 'none';
+    }
     async function createRoom() {
       try {
         const resp = await fetch('/api/room', { method: 'POST' });
         const data = await resp.json();
         document.getElementById('join-code').value = data.code;
-        notify('Ruang dibuat: ' + data.code, 'success');
+        // Auto-fill trainer token so creator can join immediately as trainer.
+        myTrainerToken = data.trainerToken;
+        document.getElementById('join-trainer-token').value = data.trainerToken;
+        document.getElementById('join-role').value = 'trainer';
+        document.getElementById('trainer-token-row').style.display = '';
+        notify('Ruang dibuat: ' + data.code + ' | Simpan token trainer Anda!', 'success');
       } catch (err) {
         notify('Gagal buat ruang: ' + err.message, 'error');
       }
@@ -475,6 +489,9 @@
         notify('Masukkan kode ruang dan nama', 'error');
         return;
       }
+      // Read trainer token from input (only meaningful when role === 'trainer').
+      const tokenInput = document.getElementById('join-trainer-token').value.trim();
+      myTrainerToken = role === 'trainer' ? (tokenInput || null) : null;
       roomCode = code;
       myRole = role;
       myLang = lang;
@@ -497,7 +514,7 @@
           type: 'room.join',
           code,
           name,
-          role,
+          trainerToken: myTrainerToken || undefined,
           lang,
           trainerMode: myTrainerMode
         }));

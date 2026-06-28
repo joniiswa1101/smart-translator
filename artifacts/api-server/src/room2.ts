@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+import { randomBytes } from "crypto";
 import { logger } from "./lib/logger";
 
 export type Lang = "id" | "en" | "bn" | "zh" | "th" | "hi" | "ar";
@@ -35,6 +36,7 @@ export interface Turn2 {
 
 export interface Room2 {
   code: string;
+  trainerToken: string;
   participants: Map<string, Participant2>;
   currentSpeaker: string | null;
   turnId: number;
@@ -48,13 +50,20 @@ export interface Room2 {
   glossaryId?: string | null; // company/room glossary for custom terminology
 }
 
+// Generate a high-entropy 8-character room code (36^8 ≈ 2.8 trillion possibilities).
 function generateCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "TR";
-  for (let i = 0; i < 2; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  let code = "";
+  const bytes = randomBytes(8);
+  for (let i = 0; i < 8; i++) {
+    code += chars[bytes[i]! % chars.length];
   }
   return code;
+}
+
+// Generate a cryptographically random trainer token (32 hex chars = 128 bits).
+function generateToken(): string {
+  return randomBytes(16).toString("hex");
 }
 
 // Determine which languages each participant needs to hear.
@@ -88,13 +97,15 @@ export function getAllTargetLangs(allParticipants: Participant2[], speakerId: st
 
 const rooms2: Map<string, Room2> = new Map();
 
-export function createRoom2(glossaryId?: string | null): string {
+export function createRoom2(glossaryId?: string | null): { code: string; trainerToken: string } {
   let code = generateCode();
   while (rooms2.has(code)) {
     code = generateCode();
   }
+  const trainerToken = generateToken();
   const room: Room2 = {
     code,
+    trainerToken,
     participants: new Map(),
     currentSpeaker: null,
     turnId: 0,
@@ -109,7 +120,7 @@ export function createRoom2(glossaryId?: string | null): string {
   };
   rooms2.set(code, room);
   logger.info({ code, glossaryId }, "Room2 created");
-  return code;
+  return { code, trainerToken };
 }
 
 export function getRoom2(code: string): Room2 | undefined {
@@ -120,12 +131,14 @@ export function joinRoom2(
   room: Room2,
   id: string,
   name: string,
-  role: "trainer" | "participant",
+  trainerToken: string | undefined,
   spokenLang: Lang,
   hearLang: Lang,
   ws: WebSocket,
   deviceId?: string,
 ): Participant2 {
+  const role: "trainer" | "participant" =
+    trainerToken && trainerToken === room.trainerToken ? "trainer" : "participant";
   const participant: Participant2 = {
     id,
     name,
@@ -138,7 +151,7 @@ export function joinRoom2(
     deviceId: deviceId || null,
   };
   room.participants.set(id, participant);
-  logger.info({ roomCode: room.code, participantId: id }, "Participant2 joined");
+  logger.info({ roomCode: room.code, participantId: id, role }, "Participant2 joined");
   return participant;
 }
 

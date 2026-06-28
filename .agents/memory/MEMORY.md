@@ -5,3 +5,4 @@
 - [License & monetization](license-monetization.md) — per-device browser fingerprint, Free/Pro tier, 5 turns/month limit, monthly reset via monthKey. Enforced at WebSocket join + turn.request. DB schema: `devices` + `usage_logs` (Drizzle). Upgrade prompt in UI.
 - [Custom glossary pipeline](custom-glossary.md) — DB-backed `glossaries` table per companyId. `buildCustomGlossaryContext()` fetches from DB and prepends to translate prompt. REST API: GET/POST/DELETE `/api/glossary/:companyId`. Room created with optional `glossaryId`.
 - [API platform](api-platform.md) — LMS/HRIS integration via `/api/platform/*` with `X-API-Key` auth middleware. Endpoints: stats, room detail, create room. API key management: generate/list/revoke.
+- [Room access control](room-access-control.md) — Room codes are 8 crypto-random chars (36^8). Trainer role enforced by per-room `trainerToken` secret; `joinRoom/joinRoom2` no longer accept a client-supplied role.

@@ -4,9 +4,10 @@ import { createRoom, getRoom, getParticipantList } from "../room";
 const router: IRouter = Router();
 
 // POST /api/room - Create a new room
+// Returns code (share with all participants) and trainerToken (share only with trainer).
 router.post("/room", (_req, res) => {
-  const code = createRoom();
-  res.json({ code });
+  const { code, trainerToken } = createRoom();
+  res.json({ code, trainerToken });
 });
 
 // GET /api/room/:code - Get room info

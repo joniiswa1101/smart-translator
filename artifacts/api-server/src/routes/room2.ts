@@ -5,10 +5,11 @@ const router: IRouter = Router();
 
 // POST /api/room2 - Create a new room
 // Body: { glossaryId?: string } for custom company glossary
+// Returns code (share with all participants) and trainerToken (share only with trainer).
 router.post("/room2", (req, res) => {
   const glossaryId = req.body?.glossaryId;
-  const code = createRoom2(glossaryId);
-  res.json({ code, glossaryId: glossaryId || null });
+  const { code, trainerToken } = createRoom2(glossaryId);
+  res.json({ code, trainerToken, glossaryId: glossaryId || null });
 });
 
 // GET /api/room2/:code - Get room info

@@ -76,11 +76,10 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const type = msg.type;
 
     if (type === "room.join") {
-      const { code, name, role, spokenLang, hearLang, deviceId } = msg;
+      const { code, name, trainerToken, spokenLang, hearLang, deviceId } = msg;
       const VALID_LANGS: ReadonlySet<string> = new Set(["id", "en", "bn", "zh", "th", "hi", "ar"]);
-      const VALID_ROLES: ReadonlySet<string> = new Set(["trainer", "peserta"]);
-      if (!VALID_LANGS.has(spokenLang) || !VALID_LANGS.has(hearLang) || !VALID_ROLES.has(role)) {
-        ws.send(JSON.stringify({ type: "room.error", error: "Invalid lang or role" }));
+      if (!VALID_LANGS.has(spokenLang) || !VALID_LANGS.has(hearLang)) {
+        ws.send(JSON.stringify({ type: "room.error", error: "Invalid lang" }));
         return;
       }
       const targetRoom = getRoom2(code);
@@ -101,14 +100,15 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
       roomCode = code;
       room = targetRoom;
-      participantId = `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      participant = joinRoom2(room, participantId, name, role, spokenLang as Lang, hearLang as Lang, ws, deviceId);
+      participantId = `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      // Role is determined server-side: trainer only if the correct trainerToken is presented.
+      participant = joinRoom2(room, participantId, name, trainerToken, spokenLang as Lang, hearLang as Lang, ws, deviceId);
 
       ws.send(JSON.stringify({
         type: "room.joined",
         participantId,
         code: room.code,
-        role,
+        role: participant.role,
         spokenLang,
         hearLang,
         participants: getParticipantList2(room),
@@ -116,7 +116,7 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
       broadcastToRoom2(room, {
         type: "room.participant.joined",
-        participant: { id: participantId, name, role, spokenLang, hearLang, active: true },
+        participant: { id: participantId, name, role: participant.role, spokenLang, hearLang, active: true },
       }, participantId);
       return;
     }

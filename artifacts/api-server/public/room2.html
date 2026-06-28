@@ -194,7 +194,7 @@
       <div class="join-form">
         <div class="form-row">
           <label>Kode Ruang</label>
-          <input id="join-code" type="text" placeholder="TR42" maxlength="10" />
+          <input id="join-code" type="text" placeholder="Kode 8 karakter" maxlength="12" />
         </div>
         <div class="form-row">
           <label>Nama Anda</label>
@@ -202,10 +202,14 @@
         </div>
         <div class="form-row">
           <label>Peran</label>
-          <select id="join-role" onchange="toggleTrainerModeUI()">
-            <option value="trainer">Trainer</option>
+          <select id="join-role" onchange="toggleTrainerTokenUI()">
             <option value="participant">Peserta</option>
+            <option value="trainer">Trainer</option>
           </select>
+        </div>
+        <div class="form-row" id="trainer-token-row" style="display:none;">
+          <label>Token Trainer <span style="font-size:0.7rem;color:var(--muted);">(diberikan saat buat ruang)</span></label>
+          <input id="join-trainer-token" type="text" placeholder="Token rahasia trainer" maxlength="64" autocomplete="off" />
         </div>
         <div class="form-row">
           <label>Bahasa Bicara</label>
@@ -354,6 +358,7 @@
     let myHearLang = null;
     let myName = null;
     let myDeviceId = null;
+    let myTrainerToken = null;
     let autoTurnActive = false;
     let participants = [];
     let turns = [];
@@ -465,10 +470,21 @@
         const resp = await fetch('/api/room2', { method: 'POST' });
         const data = await resp.json();
         document.getElementById('join-code').value = data.code;
-        notify('Ruang dibuat: ' + data.code, 'success');
+        // Auto-fill trainer token so creator can join immediately as trainer.
+        myTrainerToken = data.trainerToken;
+        document.getElementById('join-trainer-token').value = data.trainerToken;
+        // Make sure the Trainer role and token field are visible.
+        document.getElementById('join-role').value = 'trainer';
+        document.getElementById('trainer-token-row').style.display = '';
+        notify('Ruang dibuat: ' + data.code + ' | Simpan token trainer Anda!', 'success');
       } catch (err) {
         notify('Gagal buat ruang: ' + err.message, 'error');
       }
+    }
+
+    function toggleTrainerTokenUI() {
+      const role = document.getElementById('join-role').value;
+      document.getElementById('trainer-token-row').style.display = role === 'trainer' ? '' : 'none';
     }
     // Sync hearLang = spokenLang secara default (bisa diubah manual)
     function syncHearLang() {
@@ -488,6 +504,9 @@
         notify('Masukkan kode ruang dan nama', 'error');
         return;
       }
+      // Read trainer token from input (only meaningful when role === 'trainer').
+      const tokenInput = document.getElementById('join-trainer-token').value.trim();
+      myTrainerToken = role === 'trainer' ? (tokenInput || null) : null;
       // Generate deviceId if not set
       if (!myDeviceId) {
         myDeviceId = generateDeviceId();
@@ -531,7 +550,7 @@
           type: 'room.join',
           code: roomCode,
           name: myName,
-          role: myRole,
+          trainerToken: myTrainerToken || undefined,
           spokenLang: mySpokenLang,
           hearLang: myHearLang,
           deviceId: myDeviceId

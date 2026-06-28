@@ -67,11 +67,10 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const type = msg.type;
 
     if (type === "room.join") {
-      const { code, name, role, lang, trainerMode } = msg;
+      const { code, name, trainerToken, lang, trainerMode } = msg;
       const VALID_LANGS: ReadonlySet<string> = new Set(["id", "en", "bn"]);
-      const VALID_ROLES: ReadonlySet<string> = new Set(["trainer", "peserta"]);
-      if (!VALID_LANGS.has(lang) || !VALID_ROLES.has(role)) {
-        ws.send(JSON.stringify({ type: "room.error", error: "Invalid lang or role" }));
+      if (!VALID_LANGS.has(lang)) {
+        ws.send(JSON.stringify({ type: "room.error", error: "Invalid lang" }));
         return;
       }
       const targetRoom = getRoom(code);
@@ -81,10 +80,11 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
       }
       roomCode = code;
       room = targetRoom;
-      participantId = `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      participant = joinRoom(room, participantId, name, role, lang as Lang, ws);
-      // Trainer mode: if trainer joins with trainerMode, set it on the room
-      if (role === "trainer" && trainerMode === true) {
+      participantId = `p-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      // Role is determined server-side: trainer only if the correct trainerToken is presented.
+      participant = joinRoom(room, participantId, name, trainerToken, lang as Lang, ws);
+      // Trainer mode: only a verified trainer may activate it at join time.
+      if (participant.role === "trainer" && trainerMode === true) {
         room.trainerMode = true;
       }
       const trainerModeEnabled = room.trainerMode;
@@ -93,7 +93,7 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         type: "room.joined",
         participantId,
         code: room.code,
-        role,
+        role: participant.role,
         lang,
         trainerMode: trainerModeEnabled,
         participants: getParticipantList(room),
@@ -101,7 +101,7 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
 
       broadcastToRoom(room, {
         type: "room.participant.joined",
-        participant: { id: participantId, name, role, lang, active: true },
+        participant: { id: participantId, name, role: participant.role, lang, active: true },
       }, participantId);
 
       ensureOpenAIConnection(room);

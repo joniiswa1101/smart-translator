@@ -55,8 +55,8 @@ router.get("/platform/room/:code", apiKeyAuth, (req, res) => {
 router.post("/platform/room", apiKeyAuth, (req, res) => {
   const { createRoom2 } = require("../room2");
   const glossaryId = req.apiKey?.companyId || undefined;
-  const code = createRoom2(glossaryId);
-  res.json({ code, glossaryId: glossaryId || null });
+  const { code, trainerToken } = createRoom2(glossaryId);
+  res.json({ code, trainerToken, glossaryId: glossaryId || null });
 });
 
 // === Admin-only: API key management ===

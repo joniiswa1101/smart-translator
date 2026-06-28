@@ -1,4 +1,5 @@
 import { WebSocket } from "ws";
+import { randomBytes } from "crypto";
 import { logger } from "./lib/logger";
 
 export type Lang = "id" | "en" | "bn";
@@ -15,6 +16,7 @@ export interface Participant {
 
 export interface Room {
   code: string;
+  trainerToken: string;
   participants: Map<string, Participant>;
   createdAt: number;
   openaiWs: WebSocket | null;
@@ -48,14 +50,20 @@ export interface Turn {
   completedAt: number | null;
 }
 
-// Generate 4-character room code (e.g., "TR42")
+// Generate a high-entropy 8-character room code (36^8 ≈ 2.8 trillion possibilities).
 function generateCode(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  let code = "TR";
-  for (let i = 0; i < 2; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  let code = "";
+  const bytes = randomBytes(8);
+  for (let i = 0; i < 8; i++) {
+    code += chars[bytes[i]! % chars.length];
   }
   return code;
+}
+
+// Generate a cryptographically random trainer token (32 hex chars = 128 bits).
+function generateToken(): string {
+  return randomBytes(16).toString("hex");
 }
 
 // Map source language to target language (routing)
@@ -81,13 +89,15 @@ export function getInstructions(sourceLang: Lang, targetLang: Lang): string {
 // Room storage
 const rooms: Map<string, Room> = new Map();
 
-export function createRoom(): string {
+export function createRoom(): { code: string; trainerToken: string } {
   let code = generateCode();
   while (rooms.has(code)) {
     code = generateCode();
   }
+  const trainerToken = generateToken();
   const room: Room = {
     code,
+    trainerToken,
     participants: new Map(),
     createdAt: Date.now(),
     openaiWs: null,
@@ -107,7 +117,7 @@ export function createRoom(): string {
   };
   rooms.set(code, room);
   logger.info({ code }, "Room created");
-  return code;
+  return { code, trainerToken };
 }
 
 export function getRoom(code: string): Room | undefined {
@@ -118,10 +128,12 @@ export function joinRoom(
   room: Room,
   id: string,
   name: string,
-  role: "trainer" | "participant",
+  trainerToken: string | undefined,
   lang: Lang,
   ws: WebSocket,
 ): Participant {
+  const role: "trainer" | "participant" =
+    trainerToken && trainerToken === room.trainerToken ? "trainer" : "participant";
   const participant: Participant = {
     id,
     name,
@@ -132,7 +144,7 @@ export function joinRoom(
     joinedAt: Date.now(),
   };
   room.participants.set(id, participant);
-  logger.info({ roomCode: room.code, participantId: id }, "Participant joined");
+  logger.info({ roomCode: room.code, participantId: id, role }, "Participant joined");
   return participant;
 }
 
