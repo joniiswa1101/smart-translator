@@ -1,0 +1,49 @@
+~/workspace$ rm -f .git/refs/remotes/github/main.lock .git/index.lock
+git fetch github main
+git reset --hard github/main
+From https://github.com/joniiswa1101/smart-translator
+ * branch            main       -> FETCH_HEAD
+   1f05ff2..51dd7c2  main       -> github/main
+HEAD is now at 51dd7c2 Update Dockerfile
+error: Unable to create '/home/runner/workspace/.git/packed-refs.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+error: Unable to create '/home/runner/workspace/.git/packed-refs.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+~/workspace$ # Edit .npmrc — hapus baris ignore-scripts=false
+echo "auto-install-peers=false
+strict-peer-dependencies=false" > .npmrc
+
+# Edit package.json — hapus block pnpm.onlyBuiltDependencies
+# (sudah ada di pnpm-workspace.yaml)
+
+git add .npmrc
+git commit -m "Fix: remove ignore-scripts from .npmrc"
+git push github main
+error: Unable to create '/home/runner/workspace/.git/packed-refs.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+[main 40621c3] Fix: remove ignore-scripts from .npmrc
+ 1 file changed, 1 deletion(-)
+Enumerating objects: 5, done.
+Counting objects: 100% (5/5), done.
+Delta compression using up to 2 threads
+Compressing objects: 100% (3/3), done.
+Writing objects: 100% (3/3), 318 bytes | 318.00 KiB/s, done.
+Total 3 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
+To https://github.com/joniiswa1101/smart-translator.git
+   51dd7c2..40621c3  main -> main
