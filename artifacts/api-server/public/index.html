@@ -425,6 +425,14 @@
       <div class="card">
         <div class="card-title">Configuration</div>
 
+        <div class="config-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+          <label style="margin-bottom:2px;">API Key <span id="apikey-status" style="font-size:11px;font-weight:400;color:var(--text-muted);">(belum diset)</span></label>
+          <div style="display:flex;gap:6px;width:100%;">
+            <input type="password" id="apikey-input" placeholder="sk_tr_..." style="flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text-primary);font-size:13px;" />
+            <button id="apikey-save" style="padding:6px 10px;font-size:13px;border-radius:4px;border:1px solid var(--border);cursor:pointer;background:var(--bg-secondary);color:var(--text-primary);">Simpan</button>
+          </div>
+        </div>
+
         <div class="config-row">
           <label>Silence Threshold <span id="silence-val">1500</span> ms</label>
           <input type="range" id="silence-slider" min="500" max="2500" step="50" value="1500" />
@@ -845,21 +853,39 @@ let ws = null;
 let clientSecret = null;
 let sessionReady = false; // true only after the server acks session.update (session.updated)
 
+function getApiKey() {
+  return sessionStorage.getItem('session_api_key') || '';
+}
+
 async function initWebSocket() {
+  // Require a platform API key before spending OpenAI quota.
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    notify('Masukkan API Key di kotak konfigurasi terlebih dahulu.', 'error');
+    return;
+  }
+
   try {
     notify('Connecting...', 'info');
+
+    // Mint the OpenAI session. The server requires a valid X-API-Key header.
     const res = await fetch('/api/session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey,
+      },
       body: JSON.stringify({ targetLanguage: config.targetLanguage }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.details || data.error || 'Session failed');
 
     if (data.use_proxy) {
-      // Ephemeral sessions not available; use server-side proxy
+      // Ephemeral sessions not available; use server-side proxy.
+      // The server returns a single-use proxy_token tied to this authorized session.
+      const proxyToken = data.proxy_token || '';
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${proto}//${location.host}/ws`);
+      ws = new WebSocket(`${proto}//${location.host}/ws?proxy_token=${encodeURIComponent(proxyToken)}`);
     } else {
       // Ephemeral secret available; connect directly to OpenAI
       clientSecret = data.client_secret;
@@ -1313,6 +1339,32 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 });
 
 document.getElementById('btn-export').addEventListener('click', exportMetrics);
+
+// ─── API KEY ────────────────────────────────────────────────────────────────
+(function initApiKey() {
+  const input = document.getElementById('apikey-input');
+  const status = document.getElementById('apikey-status');
+  const existing = sessionStorage.getItem('session_api_key');
+  if (existing) {
+    status.textContent = '(tersimpan)';
+    status.style.color = 'var(--accent)';
+  }
+  document.getElementById('apikey-save').addEventListener('click', () => {
+    const val = input.value.trim();
+    if (!val) {
+      sessionStorage.removeItem('session_api_key');
+      status.textContent = '(belum diset)';
+      status.style.color = '';
+      notify('API Key dihapus', 'info');
+    } else {
+      sessionStorage.setItem('session_api_key', val);
+      input.value = '';
+      status.textContent = '(tersimpan)';
+      status.style.color = 'var(--accent)';
+      notify('API Key tersimpan', 'success');
+    }
+  });
+})();
 
 // Init threshold line position
 updateThresholdLine();

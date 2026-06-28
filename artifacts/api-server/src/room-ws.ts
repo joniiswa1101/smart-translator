@@ -21,13 +21,31 @@ import {
 const API_KEY = process.env["OPENAI_API_KEY"];
 const OPENAI_URL = "wss://api.openai.com/v1/realtime?model=gpt-realtime";
 
+/**
+ * Hard cap on cumulative audio bytes buffered per turn (~3 minutes of 24kHz PCM16).
+ * Prevents a malicious client from filling server memory by never calling audio.commit.
+ */
+const MAX_AUDIO_BUFFER_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Hard cap on the decoded size of a single audio.append message (~0.5s of audio).
+ */
+const MAX_AUDIO_CHUNK_BYTES = 256 * 1024; // 256 KB decoded
+
+/**
+ * Base64 encodes ~4/3× the decoded size. Pre-decode guard: reject the raw
+ * base64 string if it's too large before allocating a Buffer.
+ */
+const MAX_AUDIO_CHUNK_B64_LEN = Math.ceil(MAX_AUDIO_CHUNK_BYTES * 4 / 3) + 16;
+
 interface WsMessage {
   type: string;
   [key: string]: any;
 }
 
-// Create a standalone WebSocket server (no server attached)
-export const roomWss = new WebSocketServer({ noServer: true });
+// Create a standalone WebSocket server (no server attached).
+// maxPayload caps the maximum raw (base64+JSON) frame size per message.
+export const roomWss = new WebSocketServer({ noServer: true, maxPayload: 1 * 1024 * 1024 });
 
 roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   logger.info({ url: req.url }, "New client connected to room WebSocket");
@@ -100,7 +118,21 @@ roomWss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         return;
       }
       if (msg.audio && typeof msg.audio === "string") {
+        // Pre-decode guard: check base64 string length before allocating a Buffer.
+        if (msg.audio.length > MAX_AUDIO_CHUNK_B64_LEN) {
+          ws.send(JSON.stringify({ type: "room.error", error: "Audio chunk too large" }));
+          return;
+        }
         const buf = Buffer.from(msg.audio, "base64");
+        if (buf.length > MAX_AUDIO_CHUNK_BYTES) {
+          ws.send(JSON.stringify({ type: "room.error", error: "Audio chunk too large" }));
+          return;
+        }
+        const currentTotal = room.audioBuffer.reduce((acc, b) => acc + b.length, 0);
+        if (currentTotal + buf.length > MAX_AUDIO_BUFFER_BYTES) {
+          ws.send(JSON.stringify({ type: "room.error", error: "Audio buffer limit exceeded" }));
+          return;
+        }
         room.audioBuffer.push(buf);
       }
       return;

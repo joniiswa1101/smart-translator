@@ -22,12 +22,29 @@ import {
 
 const API_KEY = process.env["OPENAI_API_KEY"];
 
+/**
+ * Hard cap on cumulative audio bytes buffered per turn (~3 minutes of 24kHz PCM16).
+ * Prevents a malicious client from filling server memory by never calling audio.commit.
+ */
+const MAX_AUDIO_BUFFER_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Hard cap on the decoded size of a single audio.append message.
+ */
+const MAX_AUDIO_CHUNK_BYTES = 256 * 1024; // 256 KB decoded
+
+/**
+ * Pre-decode guard: reject oversized base64 strings before allocating a Buffer.
+ */
+const MAX_AUDIO_CHUNK_B64_LEN = Math.ceil(MAX_AUDIO_CHUNK_BYTES * 4 / 3) + 16;
+
 interface WsMessage {
   type: string;
   [key: string]: any;
 }
 
-export const room2Wss = new WebSocketServer({ noServer: true });
+// maxPayload caps the maximum raw frame size per message.
+export const room2Wss = new WebSocketServer({ noServer: true, maxPayload: 1 * 1024 * 1024 });
 
 export function attachRoom2WebSocket(server: Server) {
   server.on("upgrade", (req: IncomingMessage, socket, head) => {
@@ -115,7 +132,22 @@ room2Wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
         return;
       }
       if (msg.audio && typeof msg.audio === "string") {
-        room.audioBuffer.push(Buffer.from(msg.audio, "base64"));
+        // Pre-decode guard: check base64 string length before allocating a Buffer.
+        if (msg.audio.length > MAX_AUDIO_CHUNK_B64_LEN) {
+          ws.send(JSON.stringify({ type: "room.error", error: "Audio chunk too large" }));
+          return;
+        }
+        const buf = Buffer.from(msg.audio, "base64");
+        if (buf.length > MAX_AUDIO_CHUNK_BYTES) {
+          ws.send(JSON.stringify({ type: "room.error", error: "Audio chunk too large" }));
+          return;
+        }
+        const currentTotal = room.audioBuffer.reduce((acc, b) => acc + b.length, 0);
+        if (currentTotal + buf.length > MAX_AUDIO_BUFFER_BYTES) {
+          ws.send(JSON.stringify({ type: "room.error", error: "Audio buffer limit exceeded" }));
+          return;
+        }
+        room.audioBuffer.push(buf);
       }
       return;
     }

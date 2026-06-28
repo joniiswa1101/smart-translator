@@ -1,10 +1,32 @@
 import { Router, type IRouter } from "express";
+import { rateLimitMiddleware } from "../lib/rate-limit";
+import { apiKeyAuth } from "../middleware/api-auth";
+import { issueProxyToken } from "../lib/nonce-store";
 
 const router: IRouter = Router();
 
 const API_KEY = process.env["OPENAI_API_KEY"];
 
-router.post("/session", async (req, res) => {
+/**
+ * Rate limit as defence-in-depth (after apiKeyAuth already gates access).
+ */
+const sessionRateLimit = rateLimitMiddleware({
+  name: "session",
+  windowMs: 60_000,
+  max: 10,
+});
+
+/**
+ * POST /api/session
+ *
+ * Requires a valid X-API-Key header (platform API key checked against DB).
+ * Only authenticated callers may spend backend OpenAI quota.
+ *
+ * If OpenAI ephemeral sessions are unavailable, returns a single-use
+ * `proxy_token` that the client must present when upgrading to /ws.
+ * The proxy token is scoped and expires in 5 minutes.
+ */
+router.post("/session", apiKeyAuth, sessionRateLimit, async (req, res) => {
   try {
     // Try the ephemeral session endpoint first (preferred, secure)
     const resp = await fetch(
@@ -33,12 +55,15 @@ router.post("/session", async (req, res) => {
     }
 
     // Fallback: ephemeral sessions not available for this key.
-    // Return a placeholder that tells the frontend to use the local proxy.
+    // Issue a scoped single-use proxy token so the client can open /ws.
+    // The proxy token is validated and consumed during the WebSocket upgrade.
     const body = await resp.text();
-    req.log.warn({ status: resp.status, body }, "Ephemeral session unavailable; frontend will use local proxy");
+    req.log.warn({ status: resp.status, body }, "Ephemeral session unavailable; issuing proxy token for /ws fallback");
+    const proxyToken = issueProxyToken();
     res.json({
       use_proxy: true,
-      expires_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+      proxy_token: proxyToken,
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     });
   } catch (err: any) {
     req.log.error({ err }, "Failed to create realtime session");
