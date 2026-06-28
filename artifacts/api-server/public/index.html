@@ -34,7 +34,7 @@
         radial-gradient(ellipse 40% 30% at 80% 80%, rgba(167,139,250,0.1) 0%, transparent 50%);
       color: var(--text);
       min-height: 100vh;
-      padding: 24px;
+      padding: 16px;
     }
 
     header {
@@ -85,9 +85,9 @@
 
     .grid {
       display: grid;
-      grid-template-columns: 340px 1fr;
-      gap: 20px;
-      max-width: 1500px;
+      grid-template-columns: 300px 1fr;
+      gap: 16px;
+      max-width: 1200px;
       margin: 0 auto;
     }
 
@@ -95,7 +95,7 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 20px;
+      padding: 16px;
     }
 
     .card-title {
@@ -380,6 +380,10 @@
 
     .section-sep { margin: 16px 0; border: none; border-top: 1px solid var(--border); }
 
+    @media (max-width: 1200px) {
+      .grid { grid-template-columns: 280px 1fr; gap: 12px; }
+      body { padding: 12px; }
+    }
     @media (max-width: 900px) {
       .grid { grid-template-columns: 1fr; }
       body { padding: 12px; }
