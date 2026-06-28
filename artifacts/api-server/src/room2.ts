@@ -138,7 +138,7 @@ export function joinRoom2(
     deviceId: deviceId || null,
   };
   room.participants.set(id, participant);
-  logger.info({ roomCode: room.code, participantId: id, name, role, spokenLang, hearLang, deviceId }, "Participant2 joined");
+  logger.info({ roomCode: room.code, participantId: id }, "Participant2 joined");
   return participant;
 }
 

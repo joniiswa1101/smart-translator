@@ -274,7 +274,7 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     const sourceText = await transcribeAudio(merged, participant.spokenLang);
     if (isStale()) return;
     turn.sourceText = sourceText;
-    logger.info({ roomCode: room.code, turnId: turn.turnId, asrMs: Date.now() - asrStart, sourceText: sourceText.slice(0, 100) }, "ASR completed");
+    logger.info({ roomCode: room.code, turnId: turn.turnId, asrMs: Date.now() - asrStart }, "ASR completed");
 
     broadcastToRoom2(room, {
       type: "turn.source.transcription",
@@ -373,19 +373,12 @@ async function commitAudioTurn2(room: Room2, participant: Participant2) {
     turn.completedAt = Date.now();
     turn.totalGap = turn.completedAt - turn.startedAt;
 
-    // DIAGNOSTIC: log exactly what each participant receives
     logger.info(
       {
         roomCode: room.code,
         turnId: turn.turnId,
-        speaker: `${turn.speakerName}(${turn.sourceLang})`,
-        audioFanout: allParticipants.map((p) => {
-          const needed = getTargetLangsForParticipant(p, turn.speakerId);
-          const heard = turn.targets
-            .filter((r) => needed.includes(r.lang))
-            .map((r) => `${r.lang}:"${r.text}"`);
-          return `${p.name}[${p.role},hear=${p.hearLang}] <= ${heard.join(" | ") || "(nothing)"}`;
-        }),
+        targetCount: ttsResults.length,
+        recipientCount: allParticipants.length,
       },
       "Audio fan-out summary",
     );

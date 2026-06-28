@@ -132,7 +132,7 @@ export function joinRoom(
     joinedAt: Date.now(),
   };
   room.participants.set(id, participant);
-  logger.info({ roomCode: room.code, participantId: id, name, role, lang }, "Participant joined");
+  logger.info({ roomCode: room.code, participantId: id }, "Participant joined");
   return participant;
 }
 
