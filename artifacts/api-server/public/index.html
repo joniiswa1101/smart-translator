@@ -1339,6 +1339,9 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 document.getElementById('btn-export').addEventListener('click', exportMetrics);
 
 // ─── API KEY ────────────────────────────────────────────────────────────────
+// Default platform key: auto-populated so first-time users can connect
+// without manually entering anything. Advanced users can override.
+const DEFAULT_API_KEY = 'sk_tr_default';
 (function initApiKey() {
   const input = document.getElementById('apikey-input');
   const status = document.getElementById('apikey-status');
@@ -1346,14 +1349,20 @@ document.getElementById('btn-export').addEventListener('click', exportMetrics);
   if (existing) {
     status.textContent = '(tersimpan)';
     status.style.color = 'var(--accent)';
+  } else {
+    // Auto-set default key on first visit
+    sessionStorage.setItem('session_api_key', DEFAULT_API_KEY);
+    status.textContent = '(default aktif)';
+    status.style.color = 'var(--green)';
   }
   document.getElementById('apikey-save').addEventListener('click', () => {
     const val = input.value.trim();
     if (!val) {
       sessionStorage.removeItem('session_api_key');
-      status.textContent = '(belum diset)';
-      status.style.color = '';
-      notify('API Key dihapus', 'info');
+      sessionStorage.setItem('session_api_key', DEFAULT_API_KEY);
+      status.textContent = '(default aktif)';
+      status.style.color = 'var(--green)';
+      notify('Kembali ke default key', 'info');
     } else {
       sessionStorage.setItem('session_api_key', val);
       input.value = '';
