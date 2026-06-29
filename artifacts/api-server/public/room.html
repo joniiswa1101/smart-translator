@@ -29,9 +29,9 @@
       background-image: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.3) 0%, transparent 60%);
       color: var(--text);
       min-height: 100vh;
-      padding: 24px;
+      padding: 12px;
     }
-    .container { max-width: 900px; margin: 0 auto; }
+    .container { margin: 0 auto; }
     header { text-align: center; margin-bottom: 28px; }
     header h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; background: linear-gradient(135deg, #a78bfa, #60a5fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
     header p { color: var(--muted); font-size: 0.875rem; margin-top: 4px; }
@@ -207,6 +207,41 @@
     @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
     .hidden { display: none !important; }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      body { padding: 12px; }
+      .card { padding: 16px; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      body { padding: 8px; }
+      header h1 { font-size: 1.4rem; }
+      .nav-bar a { padding: 6px 12px; font-size: 0.8rem; }
+      .form-row { flex-direction: column; align-items: stretch; gap: 8px; }
+      .form-row label { min-width: auto; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .participant { padding: 8px 12px; }
+      .participant .avatar { width: 32px; height: 32px; font-size: 0.75rem; }
+      .status-badge { padding: 8px 16px; font-size: 0.85rem; }
+      .card { padding: 12px; border-radius: 10px; }
+      .card-title { font-size: 0.7rem; margin-bottom: 10px; }
+      .mic-btn { width: 48px; height: 48px; }
+      .mic-btn svg { width: 20px; height: 20px; }
+      .transcript-table { font-size: 0.75rem; }
+      .transcript-table th, .transcript-table td { padding: 6px; }
+    }
+    @media (max-width: 480px) {
+      body { padding: 6px; }
+      header h1 { font-size: 1.2rem; }
+      .nav-bar { flex-wrap: wrap; gap: 4px; }
+      .nav-bar a { padding: 5px 10px; font-size: 0.75rem; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .participant { gap: 8px; }
+      .participant .info .name { font-size: 0.85rem; }
+      .status-badge { padding: 6px 12px; font-size: 0.75rem; }
+      .room-badge { padding: 6px 12px; font-size: 0.8rem; }
+    }
   </style>
 </head>
 <body>
